@@ -50,3 +50,6 @@ backups/
 *.jsonl
 package-lock.json
 *.ged
+
+# Local migration reports
+/reports/

@@ -1,4 +1,5 @@
 import KinshipFinder from "@/components/KinshipFinder";
+import { getUnifiedRelationships } from "@/compat/relationships.compat";
 import { getSupabase } from "@/utils/supabase/queries";
 
 export const metadata = {
@@ -15,9 +16,7 @@ export default async function KinshipPage() {
     )
     .order("birth_year", { ascending: true, nullsFirst: false });
 
-  const { data: relationships } = await supabase
-    .from("relationships_active")
-    .select("type, person_a, person_b");
+  const relationships = await getUnifiedRelationships(supabase);
 
   return (
     <div className="flex-1 w-full relative flex flex-col pb-12">

@@ -1,3 +1,4 @@
+import { getUnifiedRelationships } from "@/compat/relationships.compat";
 import LineageManager from "@/components/LineageManager";
 import { getProfile, getSupabase } from "@/utils/supabase/queries";
 import { redirect } from "next/navigation";
@@ -16,7 +17,7 @@ export default async function LineagePage() {
     .select("*")
     .order("birth_year", { ascending: true, nullsFirst: false });
 
-  const { data: relsData } = await supabase.from("relationships_active").select("*");
+  const relsData = await getUnifiedRelationships(supabase);
 
   // Identify "roots" - people with no parents
   const persons = personsData || [];

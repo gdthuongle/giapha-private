@@ -30,7 +30,7 @@ export type VietnameseTreeLayoutNode = {
 
 export type VietnameseTreeLayoutLine = {
   id: string;
-  type: 'spouse' | 'center-down' | 'child';
+  type: 'spouse' | 'center-down' | 'sibling-bar' | 'child-down';
   x1: number;
   y1: number;
   x2: number;
@@ -136,28 +136,58 @@ export function buildVietnameseFamilyLayout(
     });
   }
 
-  sortedChildren.forEach((child, index) => {
-    const childX = childStartX + index * (NODE_WIDTH + CHILD_GAP);
-    const childTopY = childY;
+const childTopY = childY;
+const childBarY = childTopY - 36;
 
-    nodes.push({
-      id: `${family.familyId}:child:${child.id}`,
-      person: child,
-      role: 'child',
-      familyId: family.familyId,
-      x: childX,
-      y: childTopY,
-    });
+if (sortedChildren.length > 0) {
+  const firstChildCenterX = childStartX + NODE_WIDTH / 2;
+  const lastChildCenterX =
+    childStartX +
+    (sortedChildren.length - 1) * (NODE_WIDTH + CHILD_GAP) +
+    NODE_WIDTH / 2;
 
-    lines.push({
-      id: `${family.familyId}:child-line:${child.id}`,
-      type: 'child',
-      x1: centerX,
-      y1: centerY,
-      x2: childX + NODE_WIDTH / 2,
-      y2: childTopY,
-    });
+  lines.push({
+    id: `${family.familyId}:center-to-sibling-bar`,
+    type: 'center-down',
+    x1: centerX,
+    y1: centerY,
+    x2: centerX,
+    y2: childBarY,
   });
+
+  if (sortedChildren.length > 1) {
+    lines.push({
+      id: `${family.familyId}:sibling-bar`,
+      type: 'sibling-bar',
+      x1: firstChildCenterX,
+      y1: childBarY,
+      x2: lastChildCenterX,
+      y2: childBarY,
+    });
+  }
+}
+
+ sortedChildren.forEach((child, index) => {
+  const childX = childStartX + index * (NODE_WIDTH + CHILD_GAP);
+
+  nodes.push({
+    id: `${family.familyId}:child:${child.id}`,
+    person: child,
+    role: 'child',
+    familyId: family.familyId,
+    x: childX,
+    y: childTopY,
+  });
+
+  lines.push({
+    id: `${family.familyId}:child-down:${child.id}`,
+    type: 'child-down',
+    x1: childX + NODE_WIDTH / 2,
+    y1: childBarY,
+    x2: childX + NODE_WIDTH / 2,
+    y2: childTopY,
+  });
+});
 
   return {
     familyId: family.familyId,

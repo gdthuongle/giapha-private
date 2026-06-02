@@ -31,7 +31,8 @@ describe('buildVietnameseFamilyLayout', () => {
     expect(children[0].y).toBeGreaterThan(parents[0].y);
 
     expect(layout.lines.some((line) => line.type === 'spouse')).toBe(true);
-    expect(layout.lines.filter((line) => line.type === 'child')).toHaveLength(2);
+    expect(layout.lines.filter((line) => line.type === 'child-down')).toHaveLength(2);
+    expect(layout.lines.some((line) => line.type === 'sibling-bar')).toBe(true);
   });
 
   it('sorts children by birth_order then birth_year', () => {

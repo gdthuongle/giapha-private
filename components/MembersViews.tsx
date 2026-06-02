@@ -7,8 +7,10 @@ import { Person, Relationship } from "@/types";
 import { useEffect, useMemo, useRef } from "react";
 import dynamic from "next/dynamic";
 import { useSearchParams } from "next/navigation";
+import { featureFlags } from "@/lib/featureFlags";
 
 const FamilyTree = dynamic(() => import("@/components/FamilyTree"));
+const VietnameseFamilyTree = dynamic(() => import("@/components/VietnameseFamilyTree"));
 const MindmapTree = dynamic(() => import("@/components/MindmapTree"));
 const BubbleMapTree = dynamic(
   () =>
@@ -151,14 +153,22 @@ export default function MembersViews({
         )}
 
         <div className="flex-1 w-full relative z-10">
-          {currentView === "tree" && (
-            <FamilyTree
+          {currentView === "tree" &&
+           (featureFlags.vietnameseTreeLayout ? (
+             <VietnameseFamilyTree
               personsMap={personsMap}
               relationships={relationships}
               roots={roots}
               canEdit={canEdit}
-            />
-          )}
+             />
+          ) : (
+             <FamilyTree
+              personsMap={personsMap}
+              relationships={relationships}
+              roots={roots}
+              canEdit={canEdit}
+             />
+        ))}
           {currentView === "mindmap" && (
             <MindmapTree
               personsMap={personsMap}

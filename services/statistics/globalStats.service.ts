@@ -1,6 +1,6 @@
 import type { Person, Relationship } from "@/types";
 
-export type FamilyStatus = "active" | "divorced" | "separated" | string | null;
+export type FamilyStatus = "active" | "divorced" | "separated" | string | null | undefined;
 
 export interface FamilyRow {
   id: string;
@@ -252,6 +252,6 @@ function getParentWithChildrenIds(input: {
   return out;
 }
 
-function isEndedFamilyStatus(status: FamilyStatus): boolean {
+function isEndedFamilyStatus(status: FamilyStatus | undefined): boolean {
   return status === "divorced" || status === "separated";
 }

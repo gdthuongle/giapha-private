@@ -530,12 +530,6 @@ export default function FamilyStats({
       color: "bg-stone-400",
     },
     {
-      label: "Con trưởng",
-      value: legacyVisualStats.firstBorn,
-      icon: <Crown className="size-5 text-amber-500" />,
-      color: "bg-amber-400",
-    },
-    {
       label: "Gia đình",
       value: globalStats.totals.families,
       icon: <GitBranch className="size-5 text-indigo-500" />,
@@ -564,14 +558,6 @@ export default function FamilyStats({
           />
         ))}
       </div>
-
-      <RootStatsSection
-        persons={persons}
-        relationships={relationships}
-        families={families}
-        familyParents={familyParents}
-        familyChildren={familyChildren}
-      />
 
       {legacyVisualStats.generationBreakdown.length > 0 && (
         <motion.div
@@ -690,6 +676,15 @@ export default function FamilyStats({
           note="* Dự toán dựa trên năm sinh âm lịch nếu có đủ ngày/tháng, nếu không dùng năm sinh"
         />
       </div>
+
+      <RootStatsSection
+        persons={persons}
+        relationships={relationships}
+        families={families}
+        familyParents={familyParents}
+        familyChildren={familyChildren}
+      />
+
     </div>
   );
 }

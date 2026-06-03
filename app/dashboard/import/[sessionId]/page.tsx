@@ -2,6 +2,11 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AlertTriangle, ArrowLeft, CheckCircle2, Database, FileText } from "lucide-react";
 import { getSupabase } from "@/utils/supabase/queries";
+import {
+  StagingRecordActions,
+  StagingSessionBulkActions,
+} from "@/components/ImportStagingRecordActions";
+import GedcomCommitPlanPanel from "@/components/GedcomCommitPlanPanel";
 
 export const metadata = {
   title: "GEDCOM staging preview",
@@ -202,7 +207,13 @@ function SummaryCard({ label, value }: { label: string; value: unknown }) {
   );
 }
 
-function RecordCard({ record }: { record: StagingRecord }) {
+function RecordCard({
+  record,
+  sessionId,
+}: {
+  record: StagingRecord;
+  sessionId: string;
+}) {
   const main = getMainPreview(record).filter(([, value]) => {
     return value !== null && value !== undefined && value !== "";
   });
@@ -291,6 +302,11 @@ function RecordCard({ record }: { record: StagingRecord }) {
           )}
         </pre>
       </details>
+      <StagingRecordActions
+        sessionId={sessionId}
+        recordId={record.id}
+        currentStatus={record.status as any}
+      />
     </div>
   );
 }
@@ -391,7 +407,8 @@ export default async function ImportSessionPreviewPage({ params }: PageProps) {
             Hash: <span className="font-mono">{session.file_hash ?? "—"}</span>
           </div>
         </section>
-
+        <StagingSessionBulkActions sessionId={session.id} />
+        <GedcomCommitPlanPanel sessionId={session.id} />
         {recordsRes.error ? (
           <section className="rounded-2xl border border-red-200 bg-red-50 p-5 text-red-800">
             <div className="font-bold">Không tải được staging records</div>
@@ -427,7 +444,7 @@ export default async function ImportSessionPreviewPage({ params }: PageProps) {
 
                 <div className="grid gap-3 lg:grid-cols-2">
                   {items.map((record) => (
-                    <RecordCard key={record.id} record={record} />
+                    <RecordCard key={record.id} record={record} sessionId={session.id} />
                   ))}
                 </div>
               </section>

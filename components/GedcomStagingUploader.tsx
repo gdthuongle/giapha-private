@@ -20,6 +20,8 @@ export default function GedcomStagingUploader() {
       familyChildren: number;
       events: number;
       personEvents: number;
+      matches: number;
+      possibleMatches: number;
       warnings: number;
       errors: number;
     };
@@ -137,6 +139,8 @@ export default function GedcomStagingUploader() {
                 label="Person events"
                 value={result.summary.personEvents}
               />
+              <Summary label="Matches" value={result.summary.matches} />
+              <Summary label="Possible matches" value={result.summary.possibleMatches} />
               <Summary label="Warnings" value={result.summary.warnings} />
               <Summary label="Errors" value={result.summary.errors} />
             </div>

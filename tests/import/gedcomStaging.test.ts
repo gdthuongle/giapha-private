@@ -39,3 +39,37 @@ describe("buildGedcomStagingPreview", () => {
     expect(Array.isArray(preview.records)).toBe(true);
   });
 });
+  it("marks strong duplicate person as match instead of create", () => {
+    const gedcom = [
+      "0 HEAD",
+      "1 GEDC",
+      "2 VERS 5.5.1",
+      "1 CHAR UTF-8",
+      "0 @I1@ INDI",
+      "1 NAME Văn An /Nguyễn/",
+      "1 SEX M",
+      "1 BIRT",
+      "2 DATE 12 MAR 1981",
+      "0 TRLR",
+    ].join("\n");
+
+    const preview = buildGedcomStagingPreview(gedcom, {
+      existingPersons: [
+        {
+          id: "existing-p1",
+          full_name: "Nguyễn Văn An",
+          gender: "male",
+          birth_year: 1981,
+          birth_month: 3,
+          birth_day: 12,
+        },
+      ],
+    });
+
+    const person = preview.records.find((r) => r.record_type === "person");
+
+    expect(person?.action).toBe("match");
+    expect(person?.status).toBe("skipped");
+    expect(person?.normalized_payload.matched_person_id).toBe("existing-p1");
+    expect(preview.summary.matches).toBe(1);
+  });

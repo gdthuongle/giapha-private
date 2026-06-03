@@ -13,7 +13,25 @@ export async function createGedcomStagingSession(input: {
   const cookieStore = await cookies();
   const supabase = createClient(cookieStore);
 
-  const preview = buildGedcomStagingPreview(input.content);
+    const { data: existingPersons, error: existingPersonsError } = await supabase
+    .from("persons")
+    .select(
+      "id, full_name, gender, birth_year, birth_month, birth_day, death_year, death_month, death_day",
+    )
+    .is("deleted_at", null);
+
+  if (existingPersonsError) {
+    return {
+      ok: false as const,
+      error:
+        "Không tải được persons hiện có để matching: " +
+        existingPersonsError.message,
+    };
+  }
+
+  const preview = buildGedcomStagingPreview(input.content, {
+    existingPersons: existingPersons ?? [],
+  });
   const fileHash = createHash("sha256").update(input.content).digest("hex");
 
   const {

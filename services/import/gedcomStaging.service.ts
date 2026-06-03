@@ -14,6 +14,26 @@ export type ImportRecordType =
   | "warning"
   | "unknown";
 
+export interface ExistingPersonForGedcomMatch {
+  id: string;
+  full_name?: string | null;
+  gender?: string | null;
+  birth_year?: number | null;
+  birth_month?: number | null;
+  birth_day?: number | null;
+  death_year?: number | null;
+  death_month?: number | null;
+  death_day?: number | null;
+}
+
+export interface GedcomPersonMatchResult {
+  matchedPersonId: string | null;
+  matchedPersonName: string | null;
+  score: number;
+  level: "none" | "weak" | "medium" | "strong";
+  reason: string;
+}
+
 export interface ImportStagingRecordDraft {
   record_type: ImportRecordType;
   external_id?: string | null;
@@ -37,6 +57,8 @@ export interface GedcomStagingPreview {
     familyChildren: number;
     events: number;
     personEvents: number;
+    matches: number;
+    possibleMatches: number;
     warnings: number;
     errors: number;
   };
@@ -51,10 +73,16 @@ interface ParsedGedcomLike {
   warnings?: string[];
 }
 
-export function buildGedcomStagingPreview(content: string): GedcomStagingPreview {
+export function buildGedcomStagingPreview(
+  content: string,
+  options?: {
+    existingPersons?: ExistingPersonForGedcomMatch[];
+  },
+): GedcomStagingPreview {
   const warnings: string[] = [];
   const errors: string[] = [];
   const records: ImportStagingRecordDraft[] = [];
+  const existingPersons = options?.existingPersons ?? [];
 
   let parsed: ParsedGedcomLike;
 
@@ -102,38 +130,94 @@ export function buildGedcomStagingPreview(content: string): GedcomStagingPreview
     });
   }
 
-  const personIdMap = new Map<string, string>();
-
   for (const person of parsed.persons ?? []) {
-    const externalId = String(person.id ?? person.external_id ?? `person_${records.length + 1}`);
-    personIdMap.set(externalId, externalId);
+    const externalId = String(
+      person.id ?? person.external_id ?? `person_${records.length + 1}`,
+    );
 
     const fullName = getGedcomPersonFullName(person);
     const surname = getGedcomPersonSurname(person);
     const givenName = getGedcomPersonGivenName(person);
 
+    const birthYear = toNullableNumber(person.birth_year);
+    const birthMonth = toNullableNumber(person.birth_month);
+    const birthDay = toNullableNumber(person.birth_day);
+    const deathYear = toNullableNumber(person.death_year);
+    const deathMonth = toNullableNumber(person.death_month);
+    const deathDay = toNullableNumber(person.death_day);
+
+    const match = findBestExistingPersonMatch(
+      {
+        full_name: fullName,
+        gender: normalizeGender(person.gender),
+        birth_year: birthYear,
+        birth_month: birthMonth,
+        birth_day: birthDay,
+        death_year: deathYear,
+        death_month: deathMonth,
+        death_day: deathDay,
+      },
+      existingPersons,
+    );
+
+    const personWarnings: string[] = [];
+    let action: ImportStagingRecordDraft["action"] = "create";
+    let status: ImportStagingRecordDraft["status"] = "pending";
+    let confidence: ImportStagingRecordDraft["confidence"] =
+      fullName === "Chưa rõ tên" ? "review" : "certain";
+
+    if (fullName === "Chưa rõ tên") {
+      personWarnings.push("Person chưa có tên rõ ràng.");
+    }
+
+    if (match.level === "strong") {
+      action = "match";
+      status = "skipped";
+      confidence = "certain";
+      personWarnings.push(
+        `Trùng chắc với person hiện có: ${match.matchedPersonName} (${match.reason}). Record sẽ không tạo mới.`,
+      );
+    } else if (match.level === "medium") {
+      action = "match";
+      status = "pending";
+      confidence = "review";
+      personWarnings.push(
+        `Nghi trùng với person hiện có: ${match.matchedPersonName} (${match.reason}). Cần review trước khi tạo mới.`,
+      );
+    } else if (match.level === "weak") {
+      confidence = "review";
+      personWarnings.push(
+        `Có ứng viên gần giống: ${match.matchedPersonName} (${match.reason}).`,
+      );
+    }
+
     records.push({
       record_type: "person",
       external_id: externalId,
       parent_external_id: null,
-      action: "create",
-      confidence: fullName === "Chưa rõ tên" ? "review" : "certain",
-      status: "pending",
+      action,
+      confidence,
+      status,
       payload: person,
       normalized_payload: {
         external_id: externalId,
         full_name: fullName,
         gender: normalizeGender(person.gender),
-        birth_year: person.birth_year ?? null,
-        birth_month: person.birth_month ?? null,
-        birth_day: person.birth_day ?? null,
-        death_year: person.death_year ?? null,
-        death_month: person.death_month ?? null,
-        death_day: person.death_day ?? null,
-        is_deceased: Boolean(person.is_deceased || person.death_year),
+        birth_year: birthYear,
+        birth_month: birthMonth,
+        birth_day: birthDay,
+        death_year: deathYear,
+        death_month: deathMonth,
+        death_day: deathDay,
+        is_deceased: Boolean(person.is_deceased || deathYear),
         note: person.note ?? null,
+        matched_person_id: match.matchedPersonId,
+        matched_person_name: match.matchedPersonName,
+        match_score: match.score,
+        match_level: match.level,
+        match_reason: match.reason,
       },
-      warnings: fullName === "Chưa rõ tên" ? ["Person chưa có tên rõ ràng."] : [],
+      warnings: personWarnings,
       errors: [],
       sort_order: records.length,
     });
@@ -142,9 +226,9 @@ export function buildGedcomStagingPreview(content: string): GedcomStagingPreview
       record_type: "name",
       external_id: `${externalId}:primary_name`,
       parent_external_id: externalId,
-      action: "create",
-      confidence: fullName === "Chưa rõ tên" ? "review" : "certain",
-      status: "pending",
+      action: match.level === "strong" ? "skip" : "create",
+      confidence: match.level === "strong" ? "certain" : confidence,
+      status: match.level === "strong" ? "skipped" : "pending",
       payload: {
         person_external_id: externalId,
         full_name: fullName,
@@ -160,98 +244,85 @@ export function buildGedcomStagingPreview(content: string): GedcomStagingPreview
         name_type: "birth",
         language: "vi",
       },
-      warnings: [],
+      warnings:
+        match.level === "strong"
+          ? ["Person đã match chắc với dữ liệu hiện có, không tạo person_name mới."]
+          : [],
       errors: [],
       sort_order: records.length,
     });
 
-    if (person.birth_year) {
+    if (birthYear) {
       const eventExternalId = `${externalId}:birth`;
+      const dateRange = toIsoDateRange(birthYear, birthMonth, birthDay);
 
       records.push({
         record_type: "event",
         external_id: eventExternalId,
         parent_external_id: externalId,
-        action: "create",
-        confidence: "certain",
-        status: "pending",
+        action: match.level === "strong" ? "skip" : "create",
+        confidence: match.level === "strong" ? "certain" : "certain",
+        status: match.level === "strong" ? "skipped" : "pending",
         payload: person,
         normalized_payload: {
           type: "birth",
           legacy_person_external_id: externalId,
-          start_date: toIsoDateRange(
-            Number(person.birth_year),
-            person.birth_month ? Number(person.birth_month) : null,
-            person.birth_day ? Number(person.birth_day) : null,
-          ).start_date,
-          end_date: toIsoDateRange(
-            Number(person.birth_year),
-            person.birth_month ? Number(person.birth_month) : null,
-            person.birth_day ? Number(person.birth_day) : null,
-          ).end_date,
-          sort_date: toIsoDateRange(
-            Number(person.birth_year),
-            person.birth_month ? Number(person.birth_month) : null,
-            person.birth_day ? Number(person.birth_day) : null,
-          ).sort_date,
-          date_precision: getDatePrecision(person.birth_month, person.birth_day),
+          start_date: dateRange.start_date,
+          end_date: dateRange.end_date,
+          sort_date: dateRange.sort_date,
+          date_precision: getDatePrecision(birthMonth, birthDay),
           legacy_source: "gedcom.birth",
         },
-        warnings: [],
+        warnings:
+          match.level === "strong"
+            ? ["Person đã match chắc với dữ liệu hiện có, không tạo birth event mới."]
+            : [],
         errors: [],
         sort_order: records.length,
       });
 
-      records.push({
-        record_type: "person_event",
-        external_id: `${eventExternalId}:person_event`,
-        parent_external_id: eventExternalId,
-        action: "create",
-        confidence: "certain",
-        status: "pending",
-        payload: {},
-        normalized_payload: {
-          person_external_id: externalId,
-          event_external_id: eventExternalId,
-          role: "principal",
-        },
-        warnings: [],
-        errors: [],
-        sort_order: records.length,
-      });
+      if (match.level !== "strong") {
+        records.push({
+          record_type: "person_event",
+          external_id: `${eventExternalId}:person_event`,
+          parent_external_id: eventExternalId,
+          action: "create",
+          confidence: "certain",
+          status: "pending",
+          payload: {},
+          normalized_payload: {
+            person_external_id: externalId,
+            event_external_id: eventExternalId,
+            role: "principal",
+          },
+          warnings: [],
+          errors: [],
+          sort_order: records.length,
+        });
+      }
     }
 
-    if (person.death_year || person.is_deceased) {
+    if (deathYear || person.is_deceased) {
       const eventExternalId = `${externalId}:death`;
 
       records.push({
         record_type: "event",
         external_id: eventExternalId,
         parent_external_id: externalId,
-        action: person.death_year ? "create" : "skip",
-        confidence: person.death_year ? "certain" : "review",
-        status: person.death_year ? "pending" : "skipped",
+        action: match.level === "strong" ? "skip" : deathYear ? "create" : "skip",
+        confidence: deathYear ? "certain" : "review",
+        status: match.level === "strong" || !deathYear ? "skipped" : "pending",
         payload: person,
-        normalized_payload: person.death_year
+        normalized_payload: deathYear
           ? {
               type: "death",
               legacy_person_external_id: externalId,
-              start_date: toIsoDateRange(
-                Number(person.death_year),
-                person.death_month ? Number(person.death_month) : null,
-                person.death_day ? Number(person.death_day) : null,
-              ).start_date,
-              end_date: toIsoDateRange(
-                Number(person.death_year),
-                person.death_month ? Number(person.death_month) : null,
-                person.death_day ? Number(person.death_day) : null,
-              ).end_date,
-              sort_date: toIsoDateRange(
-                Number(person.death_year),
-                person.death_month ? Number(person.death_month) : null,
-                person.death_day ? Number(person.death_day) : null,
-              ).sort_date,
-              date_precision: getDatePrecision(person.death_month, person.death_day),
+              start_date: toIsoDateRange(deathYear, deathMonth, deathDay)
+                .start_date,
+              end_date: toIsoDateRange(deathYear, deathMonth, deathDay).end_date,
+              sort_date: toIsoDateRange(deathYear, deathMonth, deathDay)
+                .sort_date,
+              date_precision: getDatePrecision(deathMonth, deathDay),
               lunar_year: person.death_lunar_year ?? null,
               lunar_month: person.death_lunar_month ?? null,
               lunar_day: person.death_lunar_day ?? null,
@@ -263,14 +334,19 @@ export function buildGedcomStagingPreview(content: string): GedcomStagingPreview
               legacy_person_external_id: externalId,
               legacy_source: "gedcom.death_no_date",
             },
-        warnings: person.death_year
-          ? []
-          : ["Person có DEAT Y nhưng không có ngày mất. Sẽ không tạo death event có date."],
+        warnings:
+          match.level === "strong"
+            ? ["Person đã match chắc với dữ liệu hiện có, không tạo death event mới."]
+            : deathYear
+              ? []
+              : [
+                  "Person có DEAT Y nhưng không có ngày mất. Sẽ không tạo death event có date.",
+                ],
         errors: [],
         sort_order: records.length,
       });
 
-      if (person.death_year) {
+      if (match.level !== "strong" && deathYear) {
         records.push({
           record_type: "person_event",
           external_id: `${eventExternalId}:person_event`,
@@ -292,20 +368,47 @@ export function buildGedcomStagingPreview(content: string): GedcomStagingPreview
     }
   }
 
-  const familyMap = new Map<string, string>();
+  const strongMatchedPersonIds = new Set(
+    records
+      .filter((record) => record.record_type === "person")
+      .filter((record) => record.action === "match")
+      .filter((record) => record.status === "skipped")
+      .map((record) => record.external_id)
+      .filter(Boolean) as string[],
+  );
 
   for (const rel of parsed.relationships ?? []) {
     if (rel.type === "marriage") {
-      const a = rel.person_a ?? rel.husband_id ?? rel.person1_id;
-      const b = rel.person_b ?? rel.wife_id ?? rel.person2_id;
+      const a = String(rel.person_a ?? rel.husband_id ?? rel.person1_id ?? "");
+      const b = String(rel.person_b ?? rel.wife_id ?? rel.person2_id ?? "");
 
       if (!a || !b) {
         warnings.push("GEDCOM marriage thiếu spouse id.");
         continue;
       }
 
-      const familyExternalId = String(rel.family_id ?? rel.id ?? `family_${records.length + 1}`);
-      familyMap.set(familyExternalId, familyExternalId);
+      if (strongMatchedPersonIds.has(a) || strongMatchedPersonIds.has(b)) {
+        records.push({
+          record_type: "warning",
+          external_id: null,
+          parent_external_id: null,
+          action: "warning",
+          confidence: "manual",
+          status: "pending",
+          payload: rel,
+          normalized_payload: {},
+          warnings: [
+            "Marriage có người đã match với dữ liệu hiện có. Bỏ qua family create để tránh tạo family trùng.",
+          ],
+          errors: [],
+          sort_order: records.length,
+        });
+        continue;
+      }
+
+      const familyExternalId = String(
+        rel.family_id ?? rel.id ?? `family_${records.length + 1}`,
+      );
 
       records.push({
         record_type: "family",
@@ -334,7 +437,7 @@ export function buildGedcomStagingPreview(content: string): GedcomStagingPreview
         payload: rel,
         normalized_payload: {
           family_external_id: familyExternalId,
-          person_external_id: String(a),
+          person_external_id: a,
           role: "husband",
           sort_order: 1,
         },
@@ -353,7 +456,7 @@ export function buildGedcomStagingPreview(content: string): GedcomStagingPreview
         payload: rel,
         normalized_payload: {
           family_external_id: familyExternalId,
-          person_external_id: String(b),
+          person_external_id: b,
           role: "wife",
           sort_order: 2,
         },
@@ -367,16 +470,36 @@ export function buildGedcomStagingPreview(content: string): GedcomStagingPreview
   for (const rel of parsed.relationships ?? []) {
     if (rel.type !== "biological_child" && rel.type !== "adopted_child") continue;
 
-    const parentId = rel.person_a ?? rel.parent_id;
-    const childId = rel.person_b ?? rel.child_id;
+    const parentId = String(rel.person_a ?? rel.parent_id ?? "");
+    const childId = String(rel.person_b ?? rel.child_id ?? "");
 
     if (!parentId || !childId) {
       warnings.push("GEDCOM child relationship thiếu parent/child id.");
       continue;
     }
 
-    const familyExternalId =
-      String(rel.family_id ?? rel.parent_family_id ?? findFamilyForParent(records, String(parentId)));
+    if (strongMatchedPersonIds.has(parentId) || strongMatchedPersonIds.has(childId)) {
+      records.push({
+        record_type: "warning",
+        external_id: null,
+        parent_external_id: null,
+        action: "warning",
+        confidence: "manual",
+        status: "pending",
+        payload: rel,
+        normalized_payload: {},
+        warnings: [
+          "Child relationship có người đã match với dữ liệu hiện có. Bỏ qua family_child create để tránh tạo quan hệ trùng.",
+        ],
+        errors: [],
+        sort_order: records.length,
+      });
+      continue;
+    }
+
+    const familyExternalId = String(
+      rel.family_id ?? rel.parent_family_id ?? findFamilyForParent(records, parentId),
+    );
 
     records.push({
       record_type: "family_child",
@@ -384,20 +507,25 @@ export function buildGedcomStagingPreview(content: string): GedcomStagingPreview
       parent_external_id: familyExternalId,
       action: "create",
       confidence: familyExternalId ? "review" : "low",
-      status: familyExternalId ? "pending" : "pending",
+      status: "pending",
       payload: rel,
       normalized_payload: {
         family_external_id: familyExternalId,
-        person_external_id: String(childId),
+        person_external_id: childId,
         relationship_type: rel.type === "adopted_child" ? "adopted" : "biological",
       },
-      warnings: familyExternalId ? [] : ["Không xác định được family cho child relationship."],
+      warnings: familyExternalId
+        ? []
+        : ["Không xác định được family cho child relationship."],
       errors: [],
       sort_order: records.length,
     });
   }
 
-  const recordWarnings = records.reduce((sum, record) => sum + record.warnings.length, 0);
+  const recordWarnings = records.reduce(
+    (sum, record) => sum + record.warnings.length,
+    0,
+  );
   const recordErrors = records.reduce((sum, record) => sum + record.errors.length, 0);
 
   return {
@@ -405,10 +533,20 @@ export function buildGedcomStagingPreview(content: string): GedcomStagingPreview
       persons: records.filter((r) => r.record_type === "person").length,
       names: records.filter((r) => r.record_type === "name").length,
       families: records.filter((r) => r.record_type === "family").length,
-      familyParents: records.filter((r) => r.record_type === "family_parent").length,
-      familyChildren: records.filter((r) => r.record_type === "family_child").length,
+      familyParents: records.filter((r) => r.record_type === "family_parent")
+        .length,
+      familyChildren: records.filter((r) => r.record_type === "family_child")
+        .length,
       events: records.filter((r) => r.record_type === "event").length,
       personEvents: records.filter((r) => r.record_type === "person_event").length,
+      matches: records.filter((r) => r.record_type === "person" && r.action === "match")
+        .length,
+      possibleMatches: records.filter(
+        (r) =>
+          r.record_type === "person" &&
+          r.action === "match" &&
+          r.status === "pending",
+      ).length,
       warnings: warnings.length + recordWarnings,
       errors: errors.length + recordErrors,
     },
@@ -416,6 +554,141 @@ export function buildGedcomStagingPreview(content: string): GedcomStagingPreview
     warnings,
     errors,
   };
+}
+
+function findBestExistingPersonMatch(
+  candidate: {
+    full_name: string;
+    gender: "male" | "female" | "other" | null;
+    birth_year: number | null;
+    birth_month: number | null;
+    birth_day: number | null;
+    death_year: number | null;
+    death_month: number | null;
+    death_day: number | null;
+  },
+  existingPersons: ExistingPersonForGedcomMatch[],
+): GedcomPersonMatchResult {
+  const candidateName = normalizeNameForMatch(candidate.full_name);
+
+  if (!candidateName || candidate.full_name === "Chưa rõ tên") {
+    return emptyMatch("Không đủ tên để matching.");
+  }
+
+  let best: GedcomPersonMatchResult = emptyMatch("Không tìm thấy match.");
+
+  for (const person of existingPersons) {
+    const existingName = normalizeNameForMatch(person.full_name ?? "");
+    if (!existingName) continue;
+
+    let score = 0;
+    const reasons: string[] = [];
+
+    if (candidateName === existingName) {
+      score += 60;
+      reasons.push("trùng tên");
+    } else if (
+      candidateName.includes(existingName) ||
+      existingName.includes(candidateName)
+    ) {
+      score += 35;
+      reasons.push("tên gần giống");
+    }
+
+    if (candidate.birth_year && person.birth_year) {
+      if (candidate.birth_year === person.birth_year) {
+        score += 25;
+        reasons.push("trùng năm sinh");
+      } else {
+        score -= 25;
+        reasons.push("khác năm sinh");
+      }
+    }
+
+    if (candidate.birth_month && person.birth_month) {
+      if (candidate.birth_month === person.birth_month) {
+        score += 10;
+        reasons.push("trùng tháng sinh");
+      } else {
+        score -= 10;
+      }
+    }
+
+    if (candidate.birth_day && person.birth_day) {
+      if (candidate.birth_day === person.birth_day) {
+        score += 10;
+        reasons.push("trùng ngày sinh");
+      } else {
+        score -= 10;
+      }
+    }
+
+    if (candidate.gender && person.gender) {
+      if (candidate.gender === person.gender) {
+        score += 5;
+        reasons.push("trùng giới tính");
+      } else {
+        score -= 15;
+        reasons.push("khác giới tính");
+      }
+    }
+
+    if (candidate.death_year && person.death_year) {
+      if (candidate.death_year === person.death_year) {
+        score += 10;
+        reasons.push("trùng năm mất");
+      } else {
+        score -= 10;
+      }
+    }
+
+    const level =
+      score >= 90
+        ? "strong"
+        : score >= 70
+          ? "medium"
+          : score >= 50
+            ? "weak"
+            : "none";
+
+    if (score > best.score) {
+      best = {
+        matchedPersonId: person.id,
+        matchedPersonName: person.full_name ?? person.id,
+        score,
+        level,
+        reason: reasons.join(", ") || "điểm matching thấp",
+      };
+    }
+  }
+
+  if (best.level === "none") {
+    return emptyMatch("Không tìm thấy match đủ tin cậy.");
+  }
+
+  return best;
+}
+
+function emptyMatch(reason: string): GedcomPersonMatchResult {
+  return {
+    matchedPersonId: null,
+    matchedPersonName: null,
+    score: 0,
+    level: "none",
+    reason,
+  };
+}
+
+function normalizeNameForMatch(input: string): string {
+  return input
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "")
+    .replace(/đ/g, "d")
+    .replace(/Đ/g, "D")
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}\s]/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function getGedcomPersonFullName(person: Record<string, any>): string {
@@ -471,6 +744,8 @@ function emptySummary(warnings: number, errors: number) {
     familyChildren: 0,
     events: 0,
     personEvents: 0,
+    matches: 0,
+    possibleMatches: 0,
     warnings,
     errors,
   };
@@ -483,7 +758,10 @@ function normalizeGender(input: unknown): "male" | "female" | "other" | null {
   return null;
 }
 
-function getDatePrecision(month?: unknown, day?: unknown): "year" | "month" | "day" {
+function getDatePrecision(
+  month?: unknown,
+  day?: unknown,
+): "year" | "month" | "day" {
   if (month && day) return "day";
   if (month) return "month";
   return "year";
@@ -518,7 +796,16 @@ function toIsoDateRange(year: number, month?: number | null, day?: number | null
   };
 }
 
-function findFamilyForParent(records: ImportStagingRecordDraft[], parentExternalId: string) {
+function toNullableNumber(value: unknown): number | null {
+  if (value === null || value === undefined || value === "") return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
+function findFamilyForParent(
+  records: ImportStagingRecordDraft[],
+  parentExternalId: string,
+) {
   const parentRecord = records.find((record) => {
     return (
       record.record_type === "family_parent" &&

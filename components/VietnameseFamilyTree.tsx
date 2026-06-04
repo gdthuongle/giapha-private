@@ -167,6 +167,10 @@ export default function VietnameseFamilyTree({
   const containerRef = useRef<HTMLDivElement>(null);
   const [hoveredNodeId, setHoveredNodeId] = useState<string | null>(null);
   const [showDiagnostics, setShowDiagnostics] = useState(false);
+  const [layoutPerformance, setLayoutPerformance] = useState({
+    durationMs: 0,
+    measuredAt: "",
+  });
 
   const [manualExpandedIds, setManualExpandedIds] = useState<Set<string>>(
     new Set(),
@@ -223,10 +227,20 @@ export default function VietnameseFamilyTree({
   );
 
   const rootBlock = useMemo(() => {
-    const root = roots[0];
-    if (!root) return null;
+    const startedAt =
+      typeof performance !== "undefined" ? performance.now() : Date.now();
 
-    return buildTreeBlock({
+    const root = roots[0];
+
+    if (!root) {
+      setLayoutPerformance({
+        durationMs: 0,
+        measuredAt: new Date().toISOString(),
+      });
+      return null;
+    }
+
+    const block = buildTreeBlock({
       person: root,
       familyIndex,
       manualExpandedIds,
@@ -236,6 +250,16 @@ export default function VietnameseFamilyTree({
       level: 0,
       visited: new Set(),
     });
+
+    const endedAt =
+      typeof performance !== "undefined" ? performance.now() : Date.now();
+
+    setLayoutPerformance({
+      durationMs: Math.round((endedAt - startedAt) * 100) / 100,
+      measuredAt: new Date().toISOString(),
+    });
+
+    return block;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     roots,
@@ -266,6 +290,8 @@ export default function VietnameseFamilyTree({
         multiSpousePeople: 0,
         width: 0,
         height: 0,
+        layoutDurationMs: layoutPerformance.durationMs,
+        measuredAt: layoutPerformance.measuredAt,
       };
     }
 
@@ -274,8 +300,9 @@ export default function VietnameseFamilyTree({
       personsMap,
       families,
       familyParents,
+      layoutPerformance,
     });
-  }, [rootBlock, personsMap, families, familyParents]);
+  }, [rootBlock, personsMap, families, familyParents, layoutPerformance]);
 
   const toggleGroupExpanded = (groupId: string, currentlyExpanded: boolean) => {
     setManualExpandedIds((prevExpanded) => {
@@ -453,6 +480,8 @@ type TreeDiagnostics = {
   multiSpousePeople: number;
   width: number;
   height: number;
+  layoutDurationMs: number;
+  measuredAt: string;
 };
 
 function TreeDiagnosticsPanel({
@@ -494,7 +523,17 @@ function TreeDiagnosticsPanel({
             <DiagnosticItem label="Multi-spouse" value={diagnostics.multiSpousePeople} />
             <DiagnosticItem label="Width" value={Math.round(diagnostics.width)} />
             <DiagnosticItem label="Height" value={Math.round(diagnostics.height)} />
+            <DiagnosticItem
+              label="Layout ms"
+              value={Math.round(diagnostics.layoutDurationMs)}
+            />
           </div>
+
+          {diagnostics.measuredAt ? (
+            <div className="mt-3 rounded-xl bg-stone-50 px-3 py-2 text-[11px] text-stone-500">
+              Measured: {new Date(diagnostics.measuredAt).toLocaleTimeString("vi-VN")}
+            </div>
+          ) : null}
         </div>
       ) : null}
     </div>
@@ -517,11 +556,16 @@ function collectTreeDiagnostics({
   personsMap,
   families,
   familyParents,
+  layoutPerformance,
 }: {
   rootBlock: TreeBlock;
   personsMap: Map<string, Person>;
   families: FamilyRow[];
   familyParents: FamilyParentRow[];
+  layoutPerformance: {
+    durationMs: number;
+    measuredAt: string;
+  };
 }): TreeDiagnostics {
   const visiblePeopleIds = new Set<string>();
   const multiSpousePeopleIds = new Set<string>();
@@ -587,6 +631,8 @@ function collectTreeDiagnostics({
     multiSpousePeople: multiSpousePeopleIds.size,
     width: rootBlock.width,
     height: rootBlock.height,
+    layoutDurationMs: layoutPerformance.durationMs,
+    measuredAt: layoutPerformance.measuredAt,
   };
 }
 

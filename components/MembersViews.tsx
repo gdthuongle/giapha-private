@@ -10,7 +10,12 @@ import { useSearchParams } from "next/navigation";
 import { featureFlags } from "@/lib/featureFlags";
 
 const FamilyTree = dynamic(() => import("@/components/FamilyTree"));
-const VietnameseFamilyTree = dynamic(() => import("@/components/VietnameseFamilyTree"));
+const VietnameseFamilyTree = dynamic(
+  () => import("@/components/VietnameseFamilyTree"),
+  {
+    ssr: false,
+  },
+);
 const MindmapTree = dynamic(() => import("@/components/MindmapTree"));
 const BubbleMapTree = dynamic(
   () =>

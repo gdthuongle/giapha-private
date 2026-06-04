@@ -165,6 +165,177 @@ export default function RelationshipManager({
         });
       });
 
+      // Family Model fallback: fetch parents via two-step query.
+      // Legacy relationships may be incomplete after migration, while the tree uses Family Model.
+      const { data: childFamilyRows, error: childFamilyError } = await supabase
+        .from("family_children")
+        .select("family_id")
+        .eq("person_id", personId);
+
+      if (childFamilyError) throw childFamilyError;
+
+      const familyIds = Array.from(
+        new Set((childFamilyRows ?? []).map((row: any) => row.family_id).filter(Boolean)),
+      );
+
+      if (familyIds.length > 0) {
+        const { data: familyParentRows, error: familyParentError } = await supabase
+          .from("family_parents")
+          .select("id, family_id, role, person_id")
+          .in("family_id", familyIds);
+
+        if (familyParentError) throw familyParentError;
+
+        const parentIds = Array.from(
+          new Set((familyParentRows ?? []).map((row: any) => row.person_id).filter(Boolean)),
+        );
+
+        const { data: parentPeople, error: parentPeopleError } =
+          parentIds.length > 0
+            ? await supabase
+                .from("persons")
+                .select(`
+                  id,
+                  full_name,
+                  gender,
+                  birth_year,
+                  birth_month,
+                  birth_day,
+                  death_year,
+                  death_month,
+                  death_day,
+                  avatar_url,
+                  note,
+                  created_at,
+                  updated_at,
+                  is_deceased,
+                  is_in_law,
+                  birth_order,
+                  generation,
+                  other_names
+                `)
+                .in("id", parentIds)
+            : { data: [], error: null };
+
+        if (parentPeopleError) throw parentPeopleError;
+
+        const parentById = new Map(
+          (parentPeople ?? []).map((parent: any) => [parent.id, parent]),
+        );
+
+        const existingParentIds = new Set(
+          formattedRels
+            .filter((rel) => rel.direction === "parent")
+            .map((rel) => rel.targetPerson.id),
+        );
+
+        familyParentRows?.forEach((parentRow: any) => {
+          const parent = parentById.get(parentRow.person_id);
+          if (!parent?.id) return;
+          if (existingParentIds.has(parent.id)) return;
+
+          formattedRels.push({
+            id: `family-parent:${parentRow.family_id}:${parent.id}`,
+            type: "biological_child",
+            direction: "parent",
+            targetPerson: parent,
+            note:
+              parent.gender === "male"
+                ? "Cha"
+                : parent.gender === "female"
+                  ? "Mẹ"
+                  : parentRow.role || null,
+          });
+
+          existingParentIds.add(parent.id);
+        });
+      }
+
+      // Family Model fallback: fetch children via family_parents -> family_children.
+      // This fixes the reverse direction where mother/father should see children even if legacy relationships are incomplete.
+      const { data: parentFamilyRows, error: parentFamilyError } = await supabase
+        .from("family_parents")
+        .select("family_id")
+        .eq("person_id", personId);
+
+      if (parentFamilyError) throw parentFamilyError;
+
+      const parentFamilyIds = Array.from(
+        new Set((parentFamilyRows ?? []).map((row: any) => row.family_id).filter(Boolean)),
+      );
+
+      if (parentFamilyIds.length > 0) {
+        const { data: familyChildRows, error: familyChildError } = await supabase
+          .from("family_children")
+          .select("id, family_id, person_id")
+          .in("family_id", parentFamilyIds);
+
+        if (familyChildError) throw familyChildError;
+
+        const childIdsFromFamilyModel = Array.from(
+          new Set(
+            (familyChildRows ?? [])
+              .map((row: any) => row.person_id)
+              .filter((id: string | null) => Boolean(id) && id !== personId),
+          ),
+        );
+
+        const { data: childPeople, error: childPeopleError } =
+          childIdsFromFamilyModel.length > 0
+            ? await supabase
+                .from("persons")
+                .select(`
+                  id,
+                  full_name,
+                  gender,
+                  birth_year,
+                  birth_month,
+                  birth_day,
+                  death_year,
+                  death_month,
+                  death_day,
+                  avatar_url,
+                  note,
+                  created_at,
+                  updated_at,
+                  is_deceased,
+                  is_in_law,
+                  birth_order,
+                  generation,
+                  other_names
+                `)
+                .in("id", childIdsFromFamilyModel)
+            : { data: [], error: null };
+
+        if (childPeopleError) throw childPeopleError;
+
+        const childById = new Map(
+          (childPeople ?? []).map((child: any) => [child.id, child]),
+        );
+
+        const existingChildIds = new Set(
+          formattedRels
+            .filter((rel) => rel.direction === "child")
+            .map((rel) => rel.targetPerson.id),
+        );
+
+        familyChildRows?.forEach((childRow: any) => {
+          const child = childById.get(childRow.person_id);
+          if (!child?.id) return;
+          if (existingChildIds.has(child.id)) return;
+
+          formattedRels.push({
+            id: `family-child:${childRow.family_id}:${child.id}`,
+            type: "biological_child",
+            direction: "child",
+            targetPerson: child,
+            note: "Con",
+          });
+
+          existingChildIds.add(child.id);
+        });
+      }
+
       // Fetch in-laws (spouses of children)
       const childrenIds = formattedRels
         .filter((r) => r.direction === "child")

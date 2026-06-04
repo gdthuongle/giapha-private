@@ -12,6 +12,7 @@ import {
   Network,
   Star,
   Users,
+ DatabaseZap,
   Image as ImageIcon,
 } from "lucide-react";
 import Link from "next/link";
@@ -137,6 +138,14 @@ export default async function DashboardLaunchpad() {
       borderColor: "border-indigo-200/60",
       hoverColor: "hover:border-indigo-400 hover:shadow-indigo-100",
     },
+{
+  title: "Bảo trì dữ liệu",
+  description:
+    "Kiểm tra và sửa dữ liệu sau migration/import: Unknown persons, duplicate events, missing links, empty families.",
+  href: "/dashboard/data-maintenance",
+  icon: <DatabaseZap className="size-7" />,
+  color: "from-slate-500 to-stone-600",
+},
     {
       title: "Sao lưu & Phục hồi",
       description: "Xuất/Nhập dữ liệu toàn hệ thống",

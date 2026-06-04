@@ -122,7 +122,12 @@ export default function HeaderMenu() {
                     <Network className="size-4" />
                     Thứ tự gia phả
                   </Link>
-
+<Link
+  href="/dashboard/data-maintenance"
+  className="..."
+>
+  Bảo trì dữ liệu
+</Link>
                   <Link
                     href="/dashboard/data"
                     onClick={() => setIsOpen(false)}

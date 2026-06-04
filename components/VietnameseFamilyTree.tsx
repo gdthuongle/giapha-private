@@ -384,6 +384,7 @@ export default function VietnameseFamilyTree({
         diagnostics={diagnostics}
         show={showDiagnostics}
         setShow={setShowDiagnostics}
+        setAutoCollapseLevel={setAutoCollapseLevel}
       />
 
       <div
@@ -523,13 +524,19 @@ function TreeDiagnosticsPanel({
   diagnostics,
   show,
   setShow,
+  setAutoCollapseLevel,
 }: {
   diagnostics: TreeDiagnostics;
   show: boolean;
   setShow: (value: boolean) => void;
+  setAutoCollapseLevel: (value: number) => void;
 }) {
   const health = getTreeHealthStatus(diagnostics);
   const [copied, setCopied] = useState(false);
+
+  function recommendCollapse() {
+    setAutoCollapseLevel(4);
+  }
 
   async function copySnapshot() {
     const snapshot = {
@@ -607,11 +614,21 @@ function TreeDiagnosticsPanel({
           <button
             type="button"
             onClick={copySnapshot}
-            className="mb-3 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-stone-900 px-3 py-2 text-xs font-bold text-white hover:bg-stone-800"
+            className="mb-2 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-stone-900 px-3 py-2 text-xs font-bold text-white hover:bg-stone-800"
           >
             {copied ? <Check className="size-4" /> : <Clipboard className="size-4" />}
             {copied ? "Copied snapshot" : "Copy snapshot"}
           </button>
+
+          {health.level !== "ok" ? (
+            <button
+              type="button"
+              onClick={recommendCollapse}
+              className="mb-3 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-amber-700 px-3 py-2 text-xs font-bold text-white hover:bg-amber-800"
+            >
+              Auto-collapse to 4 generations
+            </button>
+          ) : null}
 
           <div className="grid grid-cols-2 gap-2">
             <DiagnosticItem label="Total persons" value={diagnostics.totalPersons} />

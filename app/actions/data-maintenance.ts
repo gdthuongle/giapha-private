@@ -26,3 +26,25 @@ export async function repairEventsMissingPersonLinks() {
     result: data,
   };
 }
+export async function softDeleteEmptyFamilies() {
+  const supabase = await getSupabase();
+
+  const { data, error } = await supabase.rpc("soft_delete_empty_families");
+
+  if (error) {
+    return {
+      ok: false as const,
+      error: error.message,
+    };
+  }
+
+  revalidatePath("/dashboard/data-maintenance");
+  revalidatePath("/dashboard/data-maintenance/empty-families");
+  revalidatePath("/dashboard/data-quality");
+  revalidatePath("/dashboard/stats");
+
+  return {
+    ok: true as const,
+    result: data,
+  };
+}

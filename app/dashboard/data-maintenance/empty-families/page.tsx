@@ -1,6 +1,7 @@
 import { AlertTriangle, DatabaseZap } from "lucide-react";
 import { getSupabase } from "@/utils/supabase/queries";
 import { buildEmptyFamilyRows } from "@/services/data-maintenance/emptyFamilies.service";
+import SoftDeleteEmptyFamiliesButton from "@/components/SoftDeleteEmptyFamiliesButton";
 
 export const metadata = {
   title: "Empty families maintenance",
@@ -91,7 +92,7 @@ export default async function EmptyFamiliesPage() {
 
             <DatabaseZap className="size-7 text-stone-400" />
           </div>
-
+<SoftDeleteEmptyFamiliesButton count={rows.length} />
           {rows.length > 0 ? (
             <div className="mt-5 overflow-x-auto">
               <table className="min-w-full text-sm">

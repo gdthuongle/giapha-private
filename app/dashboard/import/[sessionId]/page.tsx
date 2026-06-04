@@ -8,6 +8,7 @@ import {
 } from "@/components/ImportStagingRecordActions";
 import GedcomCommitPlanPanel from "@/components/GedcomCommitPlanPanel";
 import GedcomRoundTripReport from "@/components/GedcomRoundTripReport";
+import ImportSafetyGate from "@/components/ImportSafetyGate";
 import GedcomCommitExecutePanel from "@/components/GedcomCommitExecutePanel";
 
 export const metadata = {
@@ -337,6 +338,7 @@ export default async function ImportSessionPreviewPage({ params }: PageProps) {
 
   const session = sessionRes.data as ImportSession;
   const records = (recordsRes.data ?? []) as StagingRecord[];
+  const mergeSuggestions: Array<{ status: string }> = [];
   const grouped = groupRecords(records);
 
   const orderedTypes = [
@@ -414,6 +416,13 @@ export default async function ImportSessionPreviewPage({ params }: PageProps) {
           sessionId={session.id}
           summary={session.summary as any}
           records={records as any}
+        />
+
+        <ImportSafetyGate
+          sessionId={session.id}
+          summary={session.summary as any}
+          records={records as any}
+          mergeSuggestions={mergeSuggestions}
         />
 
         <section className="rounded-2xl border border-indigo-200 bg-indigo-50 p-5 text-sm text-indigo-800">

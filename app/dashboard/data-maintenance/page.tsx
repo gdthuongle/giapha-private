@@ -153,6 +153,39 @@ export default async function DataMaintenancePage() {
             tone={emptyFamiliesCount > 0 ? "amber" : "emerald"}
           />
         </section>
+        <section className="rounded-2xl border border-stone-200 bg-white p-5 shadow-sm">
+          <h2 className="text-lg font-bold text-stone-900">Lối tắt</h2>
+
+          <div className="mt-4 flex flex-wrap gap-2">
+            <Link
+  href="/dashboard/admin-health"
+  className="rounded-xl bg-emerald-700 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-800"
+>
+  Admin Health
+</Link>
+
+            <Link
+              href="/dashboard/data-quality"
+              className="rounded-xl bg-amber-700 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-800"
+            >
+              Data Quality
+            </Link>
+
+            <Link
+              href="/dashboard/import"
+              className="rounded-xl bg-indigo-700 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-800"
+            >
+              GEDCOM Import
+            </Link>
+
+            <Link
+              href="/dashboard/stats"
+              className="rounded-xl bg-sky-700 px-4 py-2 text-sm font-semibold text-white hover:bg-sky-800"
+            >
+              Stats
+            </Link>
+          </div>
+        </section>
       </main>
     </div>
   );

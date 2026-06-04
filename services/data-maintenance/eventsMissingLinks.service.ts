@@ -57,7 +57,7 @@ export function buildEventsMissingLinksRows(input: {
         personNameById.get(event.legacy_person_id as string) ??
         (event.legacy_person_id as string),
       type: event.type,
-      role: event.type === "death" ? "deceased" : "principal",
+      role: event.type === "death" ? ("deceased" as const) : ("principal" as const),
       startDate: event.start_date ?? null,
       endDate: event.end_date ?? null,
       sortDate: event.sort_date ?? null,

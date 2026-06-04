@@ -2,6 +2,7 @@ import Link from "next/link";
 import { AlertTriangle, Link2Off, Eye } from "lucide-react";
 import { getSupabase } from "@/utils/supabase/queries";
 import { buildEventsMissingLinksRows } from "@/services/data-maintenance/eventsMissingLinks.service";
+import RepairEventsMissingLinksButton from "@/components/RepairEventsMissingLinksButton";
 
 export const metadata = {
   title: "Events missing links maintenance",
@@ -57,7 +58,7 @@ export default async function EventsMissingLinksPage() {
             </div>
           </div>
         </section>
-
+<RepairEventsMissingLinksButton count={rows.length} />
         {eventsRes.error ? (
           <section className="rounded-2xl border border-red-200 bg-red-50 p-5 text-red-700">
             Không tải được events: {eventsRes.error.message}

@@ -550,12 +550,31 @@ function TreeDiagnosticsPanel({
     const text = JSON.stringify(snapshot, null, 2);
 
     try {
-      await navigator.clipboard.writeText(text);
+      const copiedByClipboardApi =
+        typeof navigator !== "undefined" &&
+        Boolean(navigator.clipboard?.writeText) &&
+        window.isSecureContext;
+
+      if (copiedByClipboardApi) {
+        await navigator.clipboard.writeText(text);
+      } else {
+        copyTextWithTextareaFallback(text);
+      }
+
       setCopied(true);
       window.setTimeout(() => setCopied(false), 1600);
     } catch {
-      setCopied(false);
-      console.log("Vietnamese tree diagnostics snapshot:", snapshot);
+      try {
+        copyTextWithTextareaFallback(text);
+        setCopied(true);
+        window.setTimeout(() => setCopied(false), 1600);
+      } catch {
+        setCopied(false);
+        console.log("Vietnamese tree diagnostics snapshot:", snapshot);
+        window.alert(
+          "Không copy được tự động. Snapshot đã được ghi vào Console.",
+        );
+      }
     }
   }
 
@@ -622,6 +641,26 @@ function TreeDiagnosticsPanel({
       ) : null}
     </div>
   );
+}
+
+function copyTextWithTextareaFallback(text: string) {
+  const textarea = document.createElement("textarea");
+  textarea.value = text;
+  textarea.setAttribute("readonly", "true");
+  textarea.style.position = "fixed";
+  textarea.style.left = "-9999px";
+  textarea.style.top = "0";
+
+  document.body.appendChild(textarea);
+  textarea.focus();
+  textarea.select();
+
+  const ok = document.execCommand("copy");
+  document.body.removeChild(textarea);
+
+  if (!ok) {
+    throw new Error("document.execCommand copy failed");
+  }
 }
 
 function DiagnosticItem({ label, value }: { label: string; value: number }) {

@@ -441,6 +441,12 @@ export default async function ImportSessionPreviewPage({ params }: PageProps) {
                 <GitCompareArrows className="size-4" />
                 Mở Merge Plan
               </Link>
+              <Link
+                href={`/dashboard/import/${session.id}/audit`}
+                className="inline-flex items-center justify-center gap-2 rounded-xl bg-stone-800 px-4 py-2 text-sm font-semibold text-white hover:bg-stone-900"
+              >
+                Mở Audit
+              </Link>
             </div>
           </div>
         </section>

@@ -147,7 +147,7 @@ export default async function DataMaintenancePage() {
           <ToolCard
             title="Empty families"
             description="Theo dõi families active không có parents và children. Trang chi tiết sẽ làm ở bước sau."
-            href="/dashboard/data-maintenance"
+            href="/dashboard/data-maintenance/empty-families"
             icon={<DatabaseZap className="size-6" />}
             count={emptyFamiliesCount}
             tone={emptyFamiliesCount > 0 ? "amber" : "emerald"}

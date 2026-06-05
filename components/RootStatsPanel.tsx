@@ -1,7 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { Person, Relationship } from "@/types";
+import PersonSelector from "@/components/PersonSelector";
 import {
   calculateRootStats,
   type RootStatsResult,
@@ -79,6 +80,13 @@ export default function RootStatsPanel({
     sortedPersons[0]?.id ?? "",
   );
 
+  useEffect(() => {
+    if (sortedPersons.length === 0) return;
+    if (!rootPersonId || !sortedPersons.some((person) => person.id === rootPersonId)) {
+      setRootPersonId(sortedPersons[0].id);
+    }
+  }, [rootPersonId, sortedPersons]);
+
   const stats: RootStatsResult | null = useMemo(() => {
     if (!rootPersonId) return null;
 
@@ -125,20 +133,16 @@ export default function RootStatsPanel({
           </p>
         </div>
 
-        <label className="flex flex-col gap-1 text-sm">
-          <span className="font-medium text-stone-700">Người gốc</span>
-          <select
-            value={rootPersonId}
-            onChange={(event) => setRootPersonId(event.target.value)}
-            className="min-w-64 rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm text-stone-900 shadow-sm outline-none focus:border-stone-500"
-          >
-            {sortedPersons.map((person) => (
-              <option key={person.id} value={person.id}>
-                {getDisplayName(person)}
-              </option>
-            ))}
-          </select>
-        </label>
+        <PersonSelector
+          persons={sortedPersons}
+          selectedId={rootPersonId}
+          onSelect={(id) => {
+            if (id) setRootPersonId(id);
+          }}
+          label="Người gốc"
+          placeholder="Tìm người gốc..."
+          className="w-full sm:w-80"
+        />
       </div>
 
       {stats ? (

@@ -1,7 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { Person, Relationship } from "@/types";
+import PersonSelector from "@/components/PersonSelector";
 import MaternalPaternalTree from "@/components/MaternalPaternalTree";
 import {
   buildDualAncestryGraph,
@@ -41,6 +42,14 @@ export default function DualAncestryPanel({
   const [rootPersonId, setRootPersonId] = useState<string>(
     sortedPersons[0]?.id ?? "",
   );
+
+  useEffect(() => {
+    if (sortedPersons.length === 0) return;
+    if (!rootPersonId || !sortedPersons.some((person) => person.id === rootPersonId)) {
+      setRootPersonId(sortedPersons[0].id);
+    }
+  }, [rootPersonId, sortedPersons]);
+
   const [generationsUp, setGenerationsUp] = useState(3);
   const [generationsDown, setGenerationsDown] = useState(3);
   const [includeSpouses, setIncludeSpouses] = useState(true);
@@ -84,20 +93,16 @@ export default function DualAncestryPanel({
     <div className="space-y-5">
       <div className="rounded-2xl border border-stone-200 bg-white/90 p-5 shadow-sm">
         <div className="grid gap-4 lg:grid-cols-[1.5fr_1fr_1fr]">
-          <label className="flex flex-col gap-1 text-sm">
-            <span className="font-semibold text-stone-700">Người gốc</span>
-            <select
-              value={rootPersonId}
-              onChange={(event) => setRootPersonId(event.target.value)}
-              className="rounded-xl border border-stone-200 bg-white px-3 py-2 text-sm text-stone-900 shadow-sm outline-none focus:border-amber-400"
-            >
-              {sortedPersons.map((person) => (
-                <option key={person.id} value={person.id}>
-                  {getDisplayName(person)}
-                </option>
-              ))}
-            </select>
-          </label>
+          <PersonSelector
+            persons={sortedPersons}
+            selectedId={rootPersonId}
+            onSelect={(id) => {
+              if (id) setRootPersonId(id);
+            }}
+            label="Người gốc"
+            placeholder="Tìm người gốc..."
+            className="w-full"
+          />
 
           <label className="flex flex-col gap-1 text-sm">
             <span className="font-semibold text-stone-700">Số đời trước</span>

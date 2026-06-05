@@ -1,8 +1,9 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { Person, Relationship } from "@/types";
+import PersonSelector from "@/components/PersonSelector";
 import { getZodiacAnimal, getZodiacSign } from "@/utils/dateHelpers";
 import {
   calculateGlobalStats,
@@ -242,6 +243,13 @@ function RootStatsSection({
     sortedPersons[0]?.id ?? "",
   );
 
+  useEffect(() => {
+    if (sortedPersons.length === 0) return;
+    if (!rootPersonId || !sortedPersons.some((person) => person.id === rootPersonId)) {
+      setRootPersonId(sortedPersons[0].id);
+    }
+  }, [rootPersonId, sortedPersons]);
+
   const rootStats: RootStatsResult | null = useMemo(() => {
     if (!rootPersonId) return null;
 
@@ -284,20 +292,16 @@ function RootStatsSection({
           </p>
         </div>
 
-        <label className="flex flex-col gap-1 text-sm">
-          <span className="font-semibold text-stone-600">Chọn người gốc</span>
-          <select
-            value={rootPersonId}
-            onChange={(event) => setRootPersonId(event.target.value)}
-            className="min-w-64 rounded-xl border border-stone-200 bg-white px-3 py-2 text-sm font-medium text-stone-800 shadow-sm outline-none focus:border-emerald-400"
-          >
-            {sortedPersons.map((person) => (
-              <option key={person.id} value={person.id}>
-                {getDisplayName(person)}
-              </option>
-            ))}
-          </select>
-        </label>
+        <PersonSelector
+          persons={sortedPersons}
+          selectedId={rootPersonId}
+          onSelect={(id) => {
+            if (id) setRootPersonId(id);
+          }}
+          label="Chọn người gốc"
+          placeholder="Tìm người gốc..."
+          className="w-full sm:w-80"
+        />
       </div>
 
       {rootStats ? (

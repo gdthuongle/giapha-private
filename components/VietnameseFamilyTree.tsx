@@ -411,8 +411,13 @@ export default function VietnameseFamilyTree({
             <svg
               width={rootBlock.width + 96}
               height={rootBlock.height + 96}
-              className="rounded-2xl bg-linear-to-br from-stone-50 to-white"
-            >
+              className="vietnamese-tree-svg rounded-2xl bg-linear-to-br from-stone-50 to-white"
+            
+              style={{
+                colorScheme: "only light",
+                forcedColorAdjust: "none",
+                backgroundColor: "#fffbeb",
+              }}>
               <defs>
                 <filter
                   id="viet-node-shadow"

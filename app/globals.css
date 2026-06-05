@@ -114,3 +114,79 @@ svg tspan {
     color: #78716c;
   }
 }
+
+/* Prevent mobile browsers / Brave / Chrome forced dark mode from auto-inverting
+   the genealogy tree. The tree is designed as a light SVG canvas. */
+:root {
+  color-scheme: only light;
+}
+
+html,
+body {
+  color-scheme: only light;
+  forced-color-adjust: none;
+}
+
+/* Strong defensive override for SVG genealogy views */
+svg,
+svg *,
+[class*="tree"],
+[class*="Tree"],
+[class*="vietnamese"],
+[class*="Vietnamese"] {
+  color-scheme: only light;
+  forced-color-adjust: none;
+}
+
+/* Keep SVG text readable even when browser dark mode is enabled */
+svg text,
+svg tspan {
+  forced-color-adjust: none;
+  text-shadow: none;
+}
+
+/* Inputs/modals also stay light */
+input,
+textarea,
+select,
+button,
+dialog {
+  color-scheme: only light;
+  forced-color-adjust: none;
+}
+
+/* Brave/Android forced dark mode can turn SVG text into pale gray/white.
+   Force genealogy tree labels to remain readable with a dark fill and outline. */
+.vietnamese-tree-svg,
+.vietnamese-tree-svg * {
+  forced-color-adjust: none !important;
+  color-scheme: only light !important;
+}
+
+.vietnamese-tree-svg text {
+  fill: #1c1917 !important;
+  color: #1c1917 !important;
+  -webkit-text-fill-color: #1c1917 !important;
+  stroke: rgba(255, 255, 255, 0.86) !important;
+  stroke-width: 2px !important;
+  paint-order: stroke fill !important;
+  forced-color-adjust: none !important;
+}
+
+.vietnamese-tree-svg tspan {
+  fill: inherit !important;
+  color: inherit !important;
+  -webkit-text-fill-color: inherit !important;
+  forced-color-adjust: none !important;
+}
+
+/* Secondary date/age lines should still be visible, not pale. */
+.vietnamese-tree-svg text[font-size="9.8"],
+.vietnamese-tree-svg text[font-size="10"],
+.vietnamese-tree-svg text[font-size="11"] {
+  fill: #57534e !important;
+  color: #57534e !important;
+  -webkit-text-fill-color: #57534e !important;
+  stroke: rgba(255, 255, 255, 0.9) !important;
+  stroke-width: 1.6px !important;
+}

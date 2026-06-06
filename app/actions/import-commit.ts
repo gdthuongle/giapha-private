@@ -1,5 +1,6 @@
 "use server";
 
+import { recordAuditLog } from "@/services/audit/auditLog.service";
 import { revalidatePath } from "next/cache";
 import { getSupabase } from "@/utils/supabase/queries";
 
@@ -64,6 +65,19 @@ export async function commitGedcomStagingSession(input: {
   }
 
   const result = data as GedcomCommitRpcResult;
+
+  if (result?.ok) {
+    await recordAuditLog({
+      action: "gedcom.commit_staging_session",
+      entityType: "gedcom_session",
+      entityId: input.sessionId,
+      severity: "warning",
+      metadata: {
+        committed: result.committed,
+        warnings: result.warnings,
+      },
+    });
+  }
 
   return {
     ok: Boolean(result?.ok),

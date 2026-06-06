@@ -1,5 +1,6 @@
 "use server";
 
+import { recordAuditLog } from "@/services/audit/auditLog.service";
 import { revalidatePath } from "next/cache";
 import { getSupabase } from "@/utils/supabase/queries";
 
@@ -16,6 +17,14 @@ export async function repairEventsMissingPersonLinks() {
       error: error.message,
     };
   }
+
+  await recordAuditLog({
+    action: "data_maintenance.repair_events_missing_links",
+    entityType: "data_maintenance",
+    entityId: "events_missing_links",
+    severity: "warning",
+    metadata: { result: data },
+  });
 
   revalidatePath("/dashboard/data-maintenance/events-missing-links");
   revalidatePath("/dashboard/events");
@@ -37,6 +46,14 @@ export async function softDeleteEmptyFamilies() {
       error: error.message,
     };
   }
+
+  await recordAuditLog({
+    action: "data_maintenance.soft_delete_empty_families",
+    entityType: "data_maintenance",
+    entityId: "empty_families",
+    severity: "warning",
+    metadata: { result: data },
+  });
 
   revalidatePath("/dashboard/data-maintenance");
   revalidatePath("/dashboard/data-maintenance/empty-families");
@@ -61,6 +78,14 @@ export async function softDeleteDuplicateBirthDeathEvents() {
       error: error.message,
     };
   }
+
+  await recordAuditLog({
+    action: "data_maintenance.soft_delete_duplicate_events",
+    entityType: "data_maintenance",
+    entityId: "duplicate_birth_death_events",
+    severity: "warning",
+    metadata: { result: data },
+  });
 
   revalidatePath("/dashboard/data-maintenance");
   revalidatePath("/dashboard/data-maintenance/duplicate-events");

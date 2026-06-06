@@ -1,5 +1,6 @@
 "use server";
 
+import { recordAuditLog } from "@/services/audit/auditLog.service";
 import { getProfile, getSupabase } from "@/utils/supabase/queries";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
@@ -48,6 +49,14 @@ export async function deleteMemberProfile(memberId: string) {
     console.error("Error deleting person:", deleteError);
     return { error: "Đã xảy ra lỗi khi xoá hồ sơ." };
   }
+
+  await recordAuditLog({
+    action: "member.deleted",
+    entityType: "person",
+    entityId: memberId,
+    severity: "danger",
+    metadata: { deletedBy: profile.id },
+  });
 
   // 4. Revalidate and redirect
   revalidatePath("/dashboard/members");

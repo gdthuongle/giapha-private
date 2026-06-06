@@ -53,3 +53,7 @@ package-lock.json
 
 # Local migration reports
 /reports/
+
+# Database backups
+backups/*.sql
+backups/*.dump

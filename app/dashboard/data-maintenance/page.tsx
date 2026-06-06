@@ -6,6 +6,7 @@ import {
   ShieldCheck,
   UserRoundX,
   Wrench,
+  Activity,
 } from "lucide-react";
 import { getSupabase } from "@/utils/supabase/queries";
 
@@ -185,6 +186,14 @@ export default async function DataMaintenancePage() {
               className="rounded-xl bg-indigo-700 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-800"
             >
               GEDCOM Import
+            </Link>
+
+            <Link
+              href="/dashboard/audit-log"
+              className="inline-flex items-center gap-2 rounded-xl bg-stone-700 px-4 py-2 text-sm font-semibold text-white hover:bg-stone-800"
+            >
+              <Activity className="size-4" />
+              Audit Log
             </Link>
 
             <Link

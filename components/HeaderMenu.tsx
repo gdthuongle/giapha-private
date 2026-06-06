@@ -1,7 +1,7 @@
 "use client";
 
 import { AnimatePresence, motion } from "framer-motion";
-import { BarChart2, ChevronDown, Database, GitMerge, Info, Network, UserCircle, Users, DatabaseZap, Activity } from "lucide-react";
+import { BarChart2, ChevronDown, Database, GitMerge, Info, Network, UserCircle, Users, DatabaseZap, Activity, Settings } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import LogoutButton from "./LogoutButton";
@@ -113,6 +113,15 @@ export default function HeaderMenu() {
               >
                 <BarChart2 className="size-4" />
                 Thống kê
+              </Link>
+
+              <Link
+                href="/dashboard/account-settings"
+                onClick={() => setIsOpen(false)}
+                className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-stone-700 hover:text-amber-700 hover:bg-amber-50 transition-colors"
+              >
+                <Settings className="size-4" />
+                Cài đặt tài khoản
               </Link>
 
               {isAdmin && (

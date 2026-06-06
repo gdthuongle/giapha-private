@@ -1,5 +1,6 @@
 "use server";
 
+import { recordAuditLog } from "@/services/audit/auditLog.service";
 import { UserRole } from "@/types";
 import { getSupabase } from "@/utils/supabase/queries";
 import { createClient } from "@supabase/supabase-js";
@@ -48,6 +49,14 @@ export async function changeUserRole(userId: string, newRole: UserRole) {
     return { error: error.message };
   }
 
+  await recordAuditLog({
+    action: "user.role_changed",
+    entityType: "user",
+    entityId: userId,
+    severity: "warning",
+    metadata: { newRole },
+  });
+
   revalidatePath("/dashboard/users");
   return { success: true };
 }
@@ -62,6 +71,13 @@ export async function deleteUser(userId: string) {
     console.error("Failed to delete user:", error);
     return { error: error.message };
   }
+
+  await recordAuditLog({
+    action: "user.deleted",
+    entityType: "user",
+    entityId: userId,
+    severity: "danger",
+  });
 
   revalidatePath("/dashboard/users");
   return { success: true };
@@ -169,6 +185,21 @@ export async function adminCreateUser(formData: FormData) {
     }
   }
 
+  await recordAuditLog({
+    action: "user.created",
+    entityType: "user",
+    entityId: createdUser?.id ?? null,
+    entityLabel: email,
+    severity: "warning",
+    metadata: {
+      email,
+      fullName,
+      role,
+      isActive,
+      defaultTreeRootId,
+    },
+  });
+
   revalidatePath("/dashboard/users");
   return { success: true };
 }
@@ -238,6 +269,21 @@ export async function adminUpdateUser(formData: FormData) {
     return { error: preferenceError.message };
   }
 
+  await recordAuditLog({
+    action: "user.updated",
+    entityType: "user",
+    entityId: userId,
+    entityLabel: email,
+    severity: "warning",
+    metadata: {
+      email,
+      fullName,
+      role,
+      isActive,
+      defaultTreeRootId,
+    },
+  });
+
   revalidatePath("/dashboard/users");
   return { success: true };
 }
@@ -265,6 +311,13 @@ export async function adminResetUserPassword(formData: FormData) {
     return { error: error.message };
   }
 
+  await recordAuditLog({
+    action: "user.password_reset",
+    entityType: "user",
+    entityId: userId,
+    severity: "danger",
+  });
+
   revalidatePath("/dashboard/users");
   return { success: true };
 }
@@ -280,6 +333,15 @@ export async function toggleUserStatus(userId: string, newStatus: boolean) {
     console.error("Failed to change user status:", error);
     return { error: error.message };
   }
+
+
+  await recordAuditLog({
+    action: "user.status_changed",
+    entityType: "user",
+    entityId: userId,
+    severity: "warning",
+    metadata: { newStatus },
+  });
 
   revalidatePath("/dashboard/users");
   return { success: true };

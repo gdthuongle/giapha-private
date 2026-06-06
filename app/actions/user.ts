@@ -36,9 +36,11 @@ export async function deleteUser(userId: string) {
 }
 
 export async function adminCreateUser(formData: FormData) {
-  const email = formData.get("email")?.toString();
+  const email = formData.get("email")?.toString()?.trim().toLowerCase();
   const password = formData.get("password")?.toString();
   const role = formData.get("role")?.toString() || "member";
+  const defaultTreeRootId =
+    formData.get("default_tree_root_id")?.toString()?.trim() || null;
 
   if (role !== "admin" && role !== "editor" && role !== "member") {
     return { error: "Vai trò không hợp lệ." };
@@ -63,6 +65,52 @@ export async function adminCreateUser(formData: FormData) {
   if (error) {
     console.error("Failed to create user:", error);
     return { error: error.message };
+  }
+
+  if (defaultTreeRootId) {
+    const { data: adminUsers, error: usersError } = await supabase.rpc(
+      "get_admin_users",
+    );
+
+    if (usersError) {
+      console.error("Created user but failed to refetch user id:", usersError);
+      return {
+        error:
+          "Đã tạo người dùng, nhưng chưa lưu được gốc gia phả mặc định: " +
+          usersError.message,
+      };
+    }
+
+    const createdUser = Array.isArray(adminUsers)
+      ? adminUsers.find((user: { id?: string; email?: string }) => {
+          return user.email?.toLowerCase() === email;
+        })
+      : null;
+
+    if (createdUser?.id) {
+      const { error: preferenceError } = await supabase.rpc(
+        "upsert_user_root_preferences",
+        {
+          target_user_id: createdUser.id,
+          p_default_tree_root_id: defaultTreeRootId,
+          p_default_dual_ancestry_root_id: null,
+          p_default_in_law_root_id: null,
+          p_default_stats_root_id: null,
+        },
+      );
+
+      if (preferenceError) {
+        console.error(
+          "Created user but failed to save default tree root:",
+          preferenceError,
+        );
+        return {
+          error:
+            "Đã tạo người dùng, nhưng chưa lưu được gốc gia phả mặc định: " +
+            preferenceError.message,
+        };
+      }
+    }
   }
 
   revalidatePath("/dashboard/users");

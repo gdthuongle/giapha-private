@@ -7,14 +7,16 @@ import {
   toggleUserStatus,
 } from "@/app/actions/user";
 import config from "@/app/config";
-import { AdminUserData, UserRole } from "@/types";
+import { AdminUserData, Person, UserRole } from "@/types";
 import { AnimatePresence, motion } from "framer-motion";
 import { Trash } from "lucide-react";
+import PersonSelector from "./PersonSelector";
 import { useEffect, useState } from "react";
 
 interface AdminUserListProps {
   initialUsers: AdminUserData[];
   currentUserId: string;
+  persons: Person[];
 }
 
 interface Notification {
@@ -25,6 +27,7 @@ interface Notification {
 export default function AdminUserList({
   initialUsers,
   currentUserId,
+  persons,
 }: AdminUserListProps) {
   const [users, setUsers] = useState<AdminUserData[]>(initialUsers);
   const [loadingId, setLoadingId] = useState<string | null>(null);
@@ -32,6 +35,7 @@ export default function AdminUserList({
   const [isCreating, setIsCreating] = useState(false);
   const [notification, setNotification] = useState<Notification | null>(null);
   const [isDemo, setIsDemo] = useState(false);
+  const [defaultTreeRootId, setDefaultTreeRootId] = useState<string | null>(null);
 
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -177,6 +181,7 @@ export default function AdminUserList({
         "success",
       );
       setIsCreateModalOpen(false);
+      setDefaultTreeRootId(null);
       setTimeout(() => window.location.reload(), 1500);
     } catch (error: unknown) {
       const msg =
@@ -410,7 +415,7 @@ export default function AdminUserList({
                 Tạo Người Dùng Mới
               </h3>
               <button
-                onClick={() => setIsCreateModalOpen(false)}
+                onClick={() => { setIsCreateModalOpen(false); setDefaultTreeRootId(null); }}
                 className="text-stone-400 hover:text-stone-600 transition-colors size-8 flex items-center justify-center hover:bg-stone-100 rounded-full"
               >
                 <svg
@@ -486,12 +491,31 @@ export default function AdminUserList({
                     <option value="false">Chờ duyệt (Pending)</option>
                   </select>
                 </div>
+
+                <div>
+                  <input
+                    type="hidden"
+                    name="default_tree_root_id"
+                    value={defaultTreeRootId ?? ""}
+                  />
+                  <PersonSelector
+                    persons={persons}
+                    selectedId={defaultTreeRootId}
+                    onSelect={setDefaultTreeRootId}
+                    label="Gốc gia phả mặc định"
+                    placeholder="Chưa chọn gốc gia phả"
+                    className="w-full"
+                  />
+                  <p className="mt-2 text-xs leading-relaxed text-stone-500">
+                    Gốc này sẽ được dùng chung cho Cây gia phả, Mindmap và Bong bóng khi người dùng đăng nhập lần đầu. Người dùng vẫn có thể tự đổi lại trong Cài đặt tài khoản.
+                  </p>
+                </div>
               </div>
 
               <div className="mt-8 flex justify-end gap-3 pt-2">
                 <button
                   type="button"
-                  onClick={() => setIsCreateModalOpen(false)}
+                  onClick={() => { setIsCreateModalOpen(false); setDefaultTreeRootId(null); }}
                   className="btn"
                 >
                   Hủy

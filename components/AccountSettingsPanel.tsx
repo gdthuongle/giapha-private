@@ -1,15 +1,18 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { CheckCircle2, RotateCcw, Save } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Database, RotateCcw, Save } from "lucide-react";
 import type { Person } from "@/types";
 import PersonSelector from "@/components/PersonSelector";
 import { useUser } from "@/components/UserProvider";
 import {
   ROOT_PREFERENCE_KINDS,
+  createEmptyRootPreferences,
   getRootPreferenceAccountKey,
+  hydrateRootPreferencesFromDb,
   readAllRootPreferences,
   writeAllRootPreferences,
+  writeAllRootPreferencesToDb,
   type RootPreferenceKind,
   type RootPreferences,
 } from "@/utils/preferences/rootPreferences";
@@ -20,17 +23,6 @@ type AccountSettingsPanelProps = {
 
 function getDisplayName(person: Person): string {
   return person.full_name || person.id;
-}
-
-function createEmptyPreferences(): RootPreferences {
-  return {
-    tree: null,
-    dualAncestry: null,
-    inLaw: null,
-    mindmap: null,
-    bubble: null,
-    stats: null,
-  };
 }
 
 export default function AccountSettingsPanel({ persons }: AccountSettingsPanelProps) {
@@ -51,23 +43,41 @@ export default function AccountSettingsPanel({ persons }: AccountSettingsPanelPr
   }, [sortedPersons]);
 
   const [preferences, setPreferences] = useState<RootPreferences>(() =>
-    createEmptyPreferences(),
+    createEmptyRootPreferences(),
   );
   const [loaded, setLoaded] = useState(false);
   const [savedMessage, setSavedMessage] = useState<string | null>(null);
+  const [saveWarning, setSaveWarning] = useState<string | null>(null);
 
   useEffect(() => {
-    const stored = readAllRootPreferences(accountKey);
-    const normalized: RootPreferences = createEmptyPreferences();
+    let ignore = false;
 
-    for (const item of ROOT_PREFERENCE_KINDS) {
-      const value = stored[item.kind];
-      normalized[item.kind] = value && validPersonIds.has(value) ? value : null;
+    async function loadPreferences() {
+      setLoaded(false);
+
+      const local = readAllRootPreferences(accountKey);
+      const merged = user?.id
+        ? await hydrateRootPreferencesFromDb({ userId: user.id, email: user.email })
+        : local;
+
+      if (ignore) return;
+
+      const normalized: RootPreferences = createEmptyRootPreferences();
+      for (const item of ROOT_PREFERENCE_KINDS) {
+        const value = merged[item.kind];
+        normalized[item.kind] = value && validPersonIds.has(value) ? value : null;
+      }
+
+      setPreferences(normalized);
+      setLoaded(true);
     }
 
-    setPreferences(normalized);
-    setLoaded(true);
-  }, [accountKey, validPersonIds]);
+    loadPreferences();
+
+    return () => {
+      ignore = true;
+    };
+  }, [accountKey, user?.id, user?.email, validPersonIds]);
 
   const setPreference = (kind: RootPreferenceKind, personId: string | null) => {
     setPreferences((current) => ({
@@ -75,20 +85,53 @@ export default function AccountSettingsPanel({ persons }: AccountSettingsPanelPr
       [kind]: personId,
     }));
     setSavedMessage(null);
+    setSaveWarning(null);
   };
 
-  const savePreferences = () => {
+  const savePreferences = async () => {
     writeAllRootPreferences(accountKey, preferences);
-    setSavedMessage("Đã lưu cài đặt gốc mặc định cho tài khoản này trên trình duyệt hiện tại.");
-    window.setTimeout(() => setSavedMessage(null), 4500);
+
+    const dbResult = await writeAllRootPreferencesToDb(user?.id, preferences);
+    if (dbResult.ok) {
+      setSavedMessage("Đã lưu cài đặt gốc mặc định vào tài khoản của bạn.");
+      setSaveWarning(null);
+    } else {
+      setSavedMessage("Đã lưu tạm trên trình duyệt hiện tại.");
+      setSaveWarning(
+        dbResult.error
+          ? `Chưa lưu được vào database: ${dbResult.error}`
+          : "Chưa lưu được vào database.",
+      );
+    }
+
+    window.setTimeout(() => {
+      setSavedMessage(null);
+      setSaveWarning(null);
+    }, 6000);
   };
 
-  const resetPreferences = () => {
-    const empty = createEmptyPreferences();
+  const resetPreferences = async () => {
+    const empty = createEmptyRootPreferences();
     setPreferences(empty);
     writeAllRootPreferences(accountKey, empty);
-    setSavedMessage("Đã xoá các gốc mặc định đã lưu trên trình duyệt hiện tại.");
-    window.setTimeout(() => setSavedMessage(null), 4500);
+
+    const dbResult = await writeAllRootPreferencesToDb(user?.id, empty);
+    if (dbResult.ok) {
+      setSavedMessage("Đã xoá các gốc mặc định trong tài khoản của bạn.");
+      setSaveWarning(null);
+    } else {
+      setSavedMessage("Đã xoá cài đặt tạm trên trình duyệt hiện tại.");
+      setSaveWarning(
+        dbResult.error
+          ? `Chưa xoá được trong database: ${dbResult.error}`
+          : "Chưa xoá được trong database.",
+      );
+    }
+
+    window.setTimeout(() => {
+      setSavedMessage(null);
+      setSaveWarning(null);
+    }, 6000);
   };
 
   if (persons.length === 0) {
@@ -102,10 +145,11 @@ export default function AccountSettingsPanel({ persons }: AccountSettingsPanelPr
   return (
     <div className="space-y-5">
       <div className="rounded-2xl border border-amber-100 bg-amber-50/80 p-4 text-sm text-amber-900">
-        <p className="font-semibold">Cài đặt này lưu theo từng tài khoản trên trình duyệt đang dùng.</p>
+        <p className="font-semibold">Cài đặt này lưu theo tài khoản.</p>
         <p className="mt-1 text-amber-800/80">
-          Khi mở Cây gia phả, Mindmap, Bong bóng, Nội / Ngoại, Sui gia hoặc Thống kê,
-          hệ thống sẽ ưu tiên người gốc trong URL trước, sau đó mới dùng gốc mặc định đã lưu ở đây.
+          Admin có thể chọn gốc sơ đồ mặc định khi tạo người dùng. Sau khi đăng nhập,
+          mỗi thành viên có thể tự đổi gốc mặc định của mình tại đây. Nếu database chưa sẵn sàng,
+          hệ thống sẽ lưu tạm trên trình duyệt.
         </p>
       </div>
 
@@ -145,6 +189,13 @@ export default function AccountSettingsPanel({ persons }: AccountSettingsPanelPr
           </div>
         ) : null}
 
+        {saveWarning ? (
+          <div className="mt-3 flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-800">
+            <AlertTriangle className="size-4" />
+            {saveWarning}
+          </div>
+        ) : null}
+
         <div className="mt-5 grid gap-4 md:grid-cols-2">
           {ROOT_PREFERENCE_KINDS.map((item) => (
             <div
@@ -164,6 +215,19 @@ export default function AccountSettingsPanel({ persons }: AccountSettingsPanelPr
               </p>
             </div>
           ))}
+        </div>
+      </div>
+
+      <div className="rounded-2xl border border-sky-100 bg-sky-50/80 p-4 text-sm text-sky-900">
+        <div className="flex gap-3">
+          <Database className="mt-0.5 size-5 shrink-0" />
+          <div>
+            <p className="font-semibold">Lưu ý khi dùng nhiều thiết bị</p>
+            <p className="mt-1 text-sky-800/80">
+              Sau khi chạy migration <code>user_preferences</code>, cài đặt sẽ đồng bộ theo tài khoản.
+              Trước đó, app vẫn fallback an toàn sang localStorage trên từng trình duyệt.
+            </p>
+          </div>
         </div>
       </div>
     </div>

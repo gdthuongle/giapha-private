@@ -1,10 +1,6 @@
-export type RootPreferenceKind =
-  | "tree"
-  | "dualAncestry"
-  | "inLaw"
-  | "mindmap"
-  | "bubble"
-  | "stats";
+import { createClient } from "@/utils/supabase/client";
+
+export type RootPreferenceKind = "tree" | "dualAncestry" | "inLaw" | "stats";
 
 export type RootPreferences = Record<RootPreferenceKind, string | null>;
 
@@ -36,6 +32,13 @@ export const ROOT_PREFERENCE_KINDS: Array<{
   },
 ];
 
+const DB_COLUMN_BY_KIND: Record<RootPreferenceKind, string> = {
+  tree: "default_tree_root_id",
+  dualAncestry: "default_dual_ancestry_root_id",
+  inLaw: "default_in_law_root_id",
+  stats: "default_stats_root_id",
+};
+
 export function getRootPreferenceAccountKey(input?: {
   userId?: string | null;
   email?: string | null;
@@ -53,7 +56,12 @@ export function getRootPreferenceStorageKey(
 export function getLegacyRootPreferenceKeys(kind: RootPreferenceKind) {
   switch (kind) {
     case "tree":
-      return ["members_rootId"];
+      return [
+        "members_rootId",
+        getRootPreferenceStorageKey("tree", "local"),
+        "giapha:root:mindmap:local",
+        "giapha:root:bubble:local",
+      ];
     case "dualAncestry":
       return ["giapha:root:dual-ancestry:local"];
     case "inLaw":
@@ -61,6 +69,15 @@ export function getLegacyRootPreferenceKeys(kind: RootPreferenceKind) {
     default:
       return [];
   }
+}
+
+export function createEmptyRootPreferences(): RootPreferences {
+  return {
+    tree: null,
+    dualAncestry: null,
+    inLaw: null,
+    stats: null,
+  };
 }
 
 export function readRootPreference(
@@ -108,8 +125,6 @@ export function readAllRootPreferences(accountKey: string): RootPreferences {
     tree: readRootPreference("tree", accountKey),
     dualAncestry: readRootPreference("dualAncestry", accountKey),
     inLaw: readRootPreference("inLaw", accountKey),
-    mindmap: readRootPreference("mindmap", accountKey),
-    bubble: readRootPreference("bubble", accountKey),
     stats: readRootPreference("stats", accountKey),
   };
 }
@@ -121,4 +136,75 @@ export function writeAllRootPreferences(
   for (const kind of Object.keys(preferences) as RootPreferenceKind[]) {
     writeRootPreference(kind, accountKey, preferences[kind]);
   }
+}
+
+export async function readAllRootPreferencesFromDb(
+  userId: string | null | undefined,
+): Promise<RootPreferences | null> {
+  if (!userId) return null;
+
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from("user_preferences")
+    .select(
+      "default_tree_root_id, default_dual_ancestry_root_id, default_in_law_root_id, default_stats_root_id",
+    )
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  if (error) {
+    console.warn("Cannot read user root preferences from database:", error);
+    return null;
+  }
+
+  if (!data) return null;
+
+  return {
+    tree: (data.default_tree_root_id as string | null) ?? null,
+    dualAncestry: (data.default_dual_ancestry_root_id as string | null) ?? null,
+    inLaw: (data.default_in_law_root_id as string | null) ?? null,
+    stats: (data.default_stats_root_id as string | null) ?? null,
+  };
+}
+
+export async function writeAllRootPreferencesToDb(
+  userId: string | null | undefined,
+  preferences: RootPreferences,
+) {
+  if (!userId) return { ok: false, error: "Chưa đăng nhập." };
+
+  const supabase = createClient();
+  const payload = {
+    user_id: userId,
+    [DB_COLUMN_BY_KIND.tree]: preferences.tree,
+    [DB_COLUMN_BY_KIND.dualAncestry]: preferences.dualAncestry,
+    [DB_COLUMN_BY_KIND.inLaw]: preferences.inLaw,
+    [DB_COLUMN_BY_KIND.stats]: preferences.stats,
+  };
+
+  const { error } = await supabase.from("user_preferences").upsert(payload, {
+    onConflict: "user_id",
+  });
+
+  if (error) {
+    console.warn("Cannot write user root preferences to database:", error);
+    return { ok: false, error: error.message };
+  }
+
+  return { ok: true, error: null };
+}
+
+export async function hydrateRootPreferencesFromDb(input: {
+  userId?: string | null;
+  email?: string | null;
+}) {
+  const accountKey = getRootPreferenceAccountKey(input);
+  const dbPreferences = await readAllRootPreferencesFromDb(input.userId);
+
+  if (!dbPreferences) return readAllRootPreferences(accountKey);
+
+  // Mirror DB preferences to localStorage so older pages and client-only fallbacks
+  // use the same root values after login.
+  writeAllRootPreferences(accountKey, dbPreferences);
+  return dbPreferences;
 }

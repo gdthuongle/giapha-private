@@ -1,11 +1,11 @@
-import DualAncestryPanel from "@/components/DualAncestryPanel";
+import InLawRelationsPanel from "@/components/InLawRelationsPanel";
 import { getSupabase } from "@/utils/supabase/queries";
 
 export const metadata = {
-  title: "Nội / Ngoại",
+  title: "Sui gia",
 };
 
-export default async function DualAncestryPage() {
+export default async function InLawRelationsPage() {
   const supabase = await getSupabase();
 
   const [
@@ -25,14 +25,14 @@ export default async function DualAncestryPage() {
   return (
     <div className="flex-1 w-full relative flex flex-col pb-12">
       <div className="w-full relative z-20 py-6 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto">
-        <h1 className="title">Nội / Ngoại</h1>
+        <h1 className="title">Sui gia</h1>
         <p className="text-stone-500 mt-1 text-sm">
-          Chọn người gốc để so các đời bên nội, bên ngoại và hậu duệ trên cùng một bảng thế hệ.
+          So tương quan thế hệ nội ngoại bên người gốc và bên vợ/chồng để tiện xác định vai vế, cách xưng hô.
         </p>
       </div>
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 w-full flex-1">
-        <DualAncestryPanel
+        <InLawRelationsPanel
           persons={personsRes.data ?? []}
           relationships={relationshipsRes.data ?? []}
           families={familiesRes.data ?? []}

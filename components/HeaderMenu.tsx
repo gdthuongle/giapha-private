@@ -89,6 +89,24 @@ export default function HeaderMenu() {
               </Link>
 
               <Link
+                href="/dashboard/dual-ancestry"
+                onClick={() => setIsOpen(false)}
+                className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-stone-700 hover:text-sky-700 hover:bg-sky-50 transition-colors"
+              >
+                <Users className="size-4" />
+                Nội / Ngoại
+              </Link>
+
+              <Link
+                href="/dashboard/in-law-relations"
+                onClick={() => setIsOpen(false)}
+                className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-stone-700 hover:text-orange-700 hover:bg-orange-50 transition-colors"
+              >
+                <GitMerge className="size-4" />
+                Sui gia
+              </Link>
+
+              <Link
                 href="/dashboard/stats"
                 onClick={() => setIsOpen(false)}
                 className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-stone-700 hover:text-purple-700 hover:bg-purple-50 transition-colors"

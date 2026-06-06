@@ -76,7 +76,11 @@ export default function PersonSelector({
   return (
     <div className={`relative ${className}`} ref={dropdownRef}>
       <button
-        onClick={() => setIsOpen(!isOpen)}
+        type="button"
+        onClick={(event) => {
+          event.preventDefault();
+          setIsOpen(!isOpen);
+        }}
         className={`w-full flex items-center gap-3 bg-white/60 border rounded-xl px-3 py-2 text-sm shadow-sm transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-amber-500/20 group
           ${isOpen ? "border-amber-300 bg-white shadow-md ring-2 ring-amber-500/10" : "border-stone-200/60 hover:border-amber-300 hover:bg-white/90 hover:shadow-md"}`}
       >
@@ -173,7 +177,11 @@ export default function PersonSelector({
             <div className="overflow-y-auto flex-1 p-1.5 custom-scrollbar">
               {showAllOption && searchTerm.toLowerCase() === "" && (
                 <button
-                  onClick={() => handleSelect(null)}
+                  type="button"
+                  onClick={(event) => {
+                    event.preventDefault();
+                    handleSelect(null);
+                  }}
                   className={`w-full flex items-center gap-3 px-3 py-2 text-sm rounded-lg transition-all duration-200 group/item mb-1
                      ${
                        selectedId === null
@@ -205,8 +213,12 @@ export default function PersonSelector({
                     const isSelected = person.id === selectedId;
                     return (
                       <button
+                        type="button"
                         key={person.id}
-                        onClick={() => handleSelect(person.id)}
+                        onClick={(event) => {
+                          event.preventDefault();
+                          handleSelect(person.id);
+                        }}
                         className={`w-full flex items-center gap-3 px-3 py-2 text-sm rounded-lg transition-all duration-200 group/item
                           ${
                             isSelected

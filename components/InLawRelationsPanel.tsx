@@ -6,6 +6,11 @@ import PersonSelector from "@/components/PersonSelector";
 import LineagePersonCard from "@/components/LineagePersonCard";
 import { useUser } from "@/components/UserProvider";
 import {
+  getRootPreferenceAccountKey,
+  readRootPreference,
+  writeRootPreference,
+} from "@/utils/preferences/rootPreferences";
+import {
   buildInLawComparison,
   type InLawComparisonResult,
   type InLawPersonItem,
@@ -129,8 +134,10 @@ export default function InLawRelationsPanel({
     );
   }, [persons]);
 
-  const accountKey = user?.id ?? user?.email ?? "local";
-  const rootPreferenceKey = `giapha:root:in-law-relations:${accountKey}`;
+  const accountKey = getRootPreferenceAccountKey({
+    userId: user?.id,
+    email: user?.email,
+  });
 
   const [rootPersonId, setRootPersonId] = useState<string>(
     sortedPersons[0]?.id ?? "",
@@ -146,7 +153,7 @@ export default function InLawRelationsPanel({
   useEffect(() => {
     if (sortedPersons.length === 0) return;
 
-    const savedRootId = window.localStorage.getItem(rootPreferenceKey);
+    const savedRootId = readRootPreference("inLaw", accountKey);
     if (savedRootId && sortedPersons.some((person) => person.id === savedRootId)) {
       setRootPersonId(savedRootId);
     } else if (!rootPersonId || !sortedPersons.some((person) => person.id === rootPersonId)) {
@@ -155,12 +162,12 @@ export default function InLawRelationsPanel({
 
     setRootPreferenceLoaded(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rootPreferenceKey, sortedPersons]);
+  }, [accountKey, sortedPersons]);
 
   useEffect(() => {
     if (!rootPreferenceLoaded || !rootPersonId) return;
-    window.localStorage.setItem(rootPreferenceKey, rootPersonId);
-  }, [rootPersonId, rootPreferenceKey, rootPreferenceLoaded]);
+    writeRootPreference("inLaw", accountKey, rootPersonId);
+  }, [rootPersonId, accountKey, rootPreferenceLoaded]);
 
   const graph = useMemo(() => {
     return buildInLawComparison({

@@ -3,6 +3,12 @@
 import { useEffect, useMemo, useState } from "react";
 import type { Person, Relationship } from "@/types";
 import PersonSelector from "@/components/PersonSelector";
+import { useUser } from "@/components/UserProvider";
+import {
+  getRootPreferenceAccountKey,
+  readRootPreference,
+  writeRootPreference,
+} from "@/utils/preferences/rootPreferences";
 import {
   calculateRootStats,
   type RootStatsResult,
@@ -76,16 +82,48 @@ export default function RootStatsPanel({
     );
   }, [persons]);
 
-  const [rootPersonId, setRootPersonId] = useState<string>(
-    sortedPersons[0]?.id ?? "",
-  );
+  const { user } = useUser();
+  const accountKey = getRootPreferenceAccountKey({
+    userId: user?.id,
+    email: user?.email,
+  });
+
+  const [rootPersonId, setRootPersonId] = useState<string>("");
 
   useEffect(() => {
     if (sortedPersons.length === 0) return;
-    if (!rootPersonId || !sortedPersons.some((person) => person.id === rootPersonId)) {
-      setRootPersonId(sortedPersons[0].id);
+
+    const validIds = new Set(sortedPersons.map((person) => person.id));
+    let preferredRootId: string | null = null;
+
+    try {
+      preferredRootId = readRootPreference("stats", accountKey);
+    } catch (error) {
+      console.warn("Failed to read stats root preference:", error);
     }
-  }, [rootPersonId, sortedPersons]);
+
+    const nextRootId =
+      preferredRootId && validIds.has(preferredRootId)
+        ? preferredRootId
+        : rootPersonId && validIds.has(rootPersonId)
+          ? rootPersonId
+          : sortedPersons[0].id;
+
+    if (nextRootId !== rootPersonId) {
+      setRootPersonId(nextRootId);
+    }
+  }, [accountKey, rootPersonId, sortedPersons]);
+
+  const handleRootSelect = (id: string | null) => {
+    if (!id) return;
+    setRootPersonId(id);
+
+    try {
+      writeRootPreference("stats", accountKey, id);
+    } catch (error) {
+      console.warn("Failed to write stats root preference:", error);
+    }
+  };
 
   const stats: RootStatsResult | null = useMemo(() => {
     if (!rootPersonId) return null;
@@ -136,9 +174,7 @@ export default function RootStatsPanel({
         <PersonSelector
           persons={sortedPersons}
           selectedId={rootPersonId}
-          onSelect={(id) => {
-            if (id) setRootPersonId(id);
-          }}
+          onSelect={handleRootSelect}
           label="Người gốc"
           placeholder="Tìm người gốc..."
           className="w-full sm:w-80"

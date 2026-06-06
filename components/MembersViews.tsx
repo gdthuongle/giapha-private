@@ -8,6 +8,13 @@ import { useEffect, useMemo, useRef } from "react";
 import dynamic from "next/dynamic";
 import { useSearchParams } from "next/navigation";
 import { featureFlags } from "@/lib/featureFlags";
+import { useUser } from "@/components/UserProvider";
+import {
+  getRootPreferenceAccountKey,
+  readRootPreference,
+  writeRootPreference,
+  type RootPreferenceKind,
+} from "@/utils/preferences/rootPreferences";
 
 const FamilyTree = dynamic(() => import("@/components/FamilyTree"));
 const VietnameseFamilyTree = dynamic(
@@ -84,6 +91,11 @@ export default function MembersViews({
 }: MembersViewsProps) {
   const { view: currentView, rootId, setView, setRootId } = useMemberListView();
   const searchParams = useSearchParams();
+  const { user } = useUser();
+  const accountKey = getRootPreferenceAccountKey({
+    userId: user?.id,
+    email: user?.email,
+  });
   const hasRestored = useRef(false);
 
   // Prepare map and roots for tree views
@@ -136,6 +148,10 @@ export default function MembersViews({
 
   const activeRootId = rootId || defaultRootId;
 
+  // Cây gia phả, Mindmap và Bong bóng dùng chung rootId của trang thành viên,
+  // nên chỉ dùng một gốc mặc định chung: "Gốc sơ đồ".
+  const currentRootPreferenceKind: RootPreferenceKind = "tree";
+
   // Khôi phục lựa chọn từ localStorage
   useEffect(() => {
     if (hasRestored.current) return;
@@ -144,13 +160,15 @@ export default function MembersViews({
 
     if (!urlRootId) {
       try {
-        const savedRootId = localStorage.getItem("members_rootId");
+        const savedRootId =
+          readRootPreference(currentRootPreferenceKind, accountKey) ||
+          localStorage.getItem("members_rootId");
 
-        if (!urlRootId && savedRootId && savedRootId !== rootId) {
+        if (savedRootId && savedRootId !== rootId) {
           setRootId(savedRootId);
         }
       } catch (e) {
-        console.warn("Failed to read from localStorage:", e);
+        console.warn("Failed to read root preference:", e);
       }
     }
 
@@ -164,14 +182,16 @@ export default function MembersViews({
 
     const timeout = setTimeout(() => {
       try {
-        if (activeRootId) localStorage.setItem("members_rootId", activeRootId);
+        if (activeRootId) {
+          writeRootPreference(currentRootPreferenceKind, accountKey, activeRootId);
+        }
       } catch (e) {
-        console.warn("Failed to write to localStorage:", e);
+        console.warn("Failed to write root preference:", e);
       }
     }, 100);
 
     return () => clearTimeout(timeout);
-  }, [currentView, activeRootId]);
+  }, [currentView, activeRootId, currentRootPreferenceKind, accountKey]);
 
   return (
     <>

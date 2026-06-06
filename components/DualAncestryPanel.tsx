@@ -7,6 +7,11 @@ import PersonSelector from "@/components/PersonSelector";
 import LineagePersonCard from "@/components/LineagePersonCard";
 import { useUser } from "@/components/UserProvider";
 import {
+  getRootPreferenceAccountKey,
+  readRootPreference,
+  writeRootPreference,
+} from "@/utils/preferences/rootPreferences";
+import {
   buildLineageComparison,
   type LineageComparisonResult,
   type LineagePersonItem,
@@ -131,8 +136,10 @@ export default function DualAncestryPanel({
     );
   }, [persons]);
 
-  const accountKey = user?.id ?? user?.email ?? "local";
-  const rootPreferenceKey = `giapha:root:dual-ancestry:${accountKey}`;
+  const accountKey = getRootPreferenceAccountKey({
+    userId: user?.id,
+    email: user?.email,
+  });
 
   const [rootPersonId, setRootPersonId] = useState<string>(
     sortedPersons[0]?.id ?? "",
@@ -147,7 +154,7 @@ export default function DualAncestryPanel({
   useEffect(() => {
     if (sortedPersons.length === 0) return;
 
-    const savedRootId = window.localStorage.getItem(rootPreferenceKey);
+    const savedRootId = readRootPreference("dualAncestry", accountKey);
     if (savedRootId && sortedPersons.some((person) => person.id === savedRootId)) {
       setRootPersonId(savedRootId);
     } else if (!rootPersonId || !sortedPersons.some((person) => person.id === rootPersonId)) {
@@ -157,12 +164,12 @@ export default function DualAncestryPanel({
     setRootPreferenceLoaded(true);
     // Chỉ load lại khi đổi tài khoản hoặc dữ liệu persons đổi.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rootPreferenceKey, sortedPersons]);
+  }, [accountKey, sortedPersons]);
 
   useEffect(() => {
     if (!rootPreferenceLoaded || !rootPersonId) return;
-    window.localStorage.setItem(rootPreferenceKey, rootPersonId);
-  }, [rootPersonId, rootPreferenceKey, rootPreferenceLoaded]);
+    writeRootPreference("dualAncestry", accountKey, rootPersonId);
+  }, [rootPersonId, accountKey, rootPreferenceLoaded]);
 
   const graph = useMemo(() => {
     return buildLineageComparison({

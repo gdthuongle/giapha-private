@@ -247,7 +247,42 @@ export default function AdminUserList({
     e.preventDefault();
     if (!editingUser) return;
 
-    if (isDemo) {
+    const formData = new FormData(e.currentTarget);
+
+    const nextEmail =
+      formData.get("email")?.toString()?.trim().toLowerCase() ??
+      editingUser.email;
+    const nextName = formData.get("full_name")?.toString()?.trim() ?? "";
+    const nextRole = (formData.get("role")?.toString() ||
+      editingUser.role) as UserRole;
+    const nextActive = formData.get("is_active")?.toString() === "true";
+    const nextRootId =
+      formData.get("default_tree_root_id")?.toString()?.trim() || null;
+
+    const currentEmail = editingUser.email.trim().toLowerCase();
+    const currentName = (editingUser.full_name ?? editingUser.name ?? "").trim();
+    const currentRootId = editingUser.default_tree_root_id ?? null;
+
+    const onlyRootChanged =
+      nextEmail === currentEmail &&
+      nextName === currentName &&
+      nextRole === editingUser.role &&
+      nextActive === editingUser.is_active &&
+      nextRootId !== currentRootId;
+
+    const hasNoChange =
+      nextEmail === currentEmail &&
+      nextName === currentName &&
+      nextRole === editingUser.role &&
+      nextActive === editingUser.is_active &&
+      nextRootId === currentRootId;
+
+    if (hasNoChange) {
+      closeEditModal();
+      return;
+    }
+
+    if (isDemo && !onlyRootChanged) {
       showNotification(
         "Đây là tài khoản demo cho mọi người sử dụng, vui lòng không thay đổi thông tin này.",
         "info",
@@ -256,7 +291,6 @@ export default function AdminUserList({
     }
 
     setIsEditing(true);
-    const formData = new FormData(e.currentTarget);
 
     try {
       const result = await adminUpdateUser(formData);
@@ -265,12 +299,6 @@ export default function AdminUserList({
         showNotification(result.error, "error");
         return;
       }
-
-      const nextEmail = formData.get("email")?.toString()?.trim().toLowerCase() ?? editingUser.email;
-      const nextName = formData.get("full_name")?.toString()?.trim() ?? "";
-      const nextRole = (formData.get("role")?.toString() || editingUser.role) as UserRole;
-      const nextActive = formData.get("is_active")?.toString() === "true";
-      const nextRootId = formData.get("default_tree_root_id")?.toString()?.trim() || null;
 
       setUsers((current) =>
         current.map((user) =>

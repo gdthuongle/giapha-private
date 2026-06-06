@@ -882,6 +882,31 @@ export default function RelationshipManager({
     }
   };
 
+  const findSharedMarriageFamilyIds = async (
+    personAId: string,
+    personBId: string,
+  ) => {
+    const { data, error } = await supabase
+      .from("family_parents")
+      .select("family_id, person_id")
+      .in("person_id", [personAId, personBId]);
+
+    if (error) throw error;
+
+    const peopleByFamilyId = new Map<string, Set<string>>();
+    for (const row of data ?? []) {
+      if (!row.family_id || !row.person_id) continue;
+      if (!peopleByFamilyId.has(row.family_id)) {
+        peopleByFamilyId.set(row.family_id, new Set());
+      }
+      peopleByFamilyId.get(row.family_id)!.add(row.person_id);
+    }
+
+    return Array.from(peopleByFamilyId.entries())
+      .filter(([, people]) => people.has(personAId) && people.has(personBId))
+      .map(([familyId]) => familyId);
+  };
+
   const handleDivorce = async (rel: EnrichedRelationship) => {
     if (rel.type !== "marriage" || rel.direction !== "spouse") return;
 
@@ -915,19 +940,51 @@ export default function RelationshipManager({
 
       if (relError) throw relError;
 
-      // Đồng bộ Family Model nếu family được migrate từ relationship legacy này.
-      // Nếu không có family khớp, update vẫn an toàn và không ảnh hưởng dữ liệu khác.
-      const { error: familyError } = await supabase
+      const familyUpdatePayload = {
+        status: "divorced",
+        end_year: now.getFullYear(),
+        updated_at: now.toISOString(),
+      };
+
+      // 1) Đồng bộ Family Model theo legacy_relationship_id nếu dữ liệu migration có lưu khóa này.
+      const { error: legacyFamilyError } = await supabase
         .from("families")
-        .update({
-          status: "divorced",
-          end_year: now.getFullYear(),
-          updated_at: now.toISOString(),
-        })
+        .update(familyUpdatePayload)
         .eq("legacy_relationship_id", rel.id)
         .is("deleted_at", null);
 
-      if (familyError) throw familyError;
+      if (legacyFamilyError) throw legacyFamilyError;
+
+      // 2) Đồng bộ theo cặp parent trong family_parents. Đây là đường chính cho dữ liệu
+      // được tạo bằng RPC ensure_family_model_marriage, vì RPC không nhất thiết lưu
+      // legacy_relationship_id. Nếu không update theo cặp, cây vẫn thấy hôn nhân active
+      // và không vẽ nét đứt sau khi bấm ly hôn.
+      let sharedFamilyIds = await findSharedMarriageFamilyIds(
+        personId,
+        rel.targetPerson.id,
+      );
+
+      if (sharedFamilyIds.length === 0) {
+        const ensuredFamilyId = await ensureFamilyModelMarriage({
+          supabase,
+          personId,
+          targetPersonId: rel.targetPerson.id,
+        });
+
+        if (ensuredFamilyId) {
+          sharedFamilyIds = [ensuredFamilyId];
+        }
+      }
+
+      if (sharedFamilyIds.length > 0) {
+        const { error: sharedFamilyError } = await supabase
+          .from("families")
+          .update(familyUpdatePayload)
+          .in("id", Array.from(new Set(sharedFamilyIds)))
+          .is("deleted_at", null);
+
+        if (sharedFamilyError) throw sharedFamilyError;
+      }
 
       fetchRelationships();
       router.refresh();

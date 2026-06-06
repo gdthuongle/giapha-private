@@ -5,6 +5,7 @@ import Link from "next/link";
 import type { Person, Relationship } from "@/types";
 import PersonSelector from "@/components/PersonSelector";
 import LineagePersonCard from "@/components/LineagePersonCard";
+import { useUser } from "@/components/UserProvider";
 import {
   buildLineageComparison,
   type LineageComparisonResult,
@@ -37,14 +38,45 @@ function BranchCell({ items }: { items: LineagePersonItem[] }) {
     <div className="space-y-2">
       {items.map((item) => (
         <LineagePersonCard
-          key={`${item.person.id}-${item.branch}-${item.generation}`}
+          key={`${item.person.id}-${item.branch}-${item.generation}-${item.isInLaw ? "inlaw" : "blood"}`}
           person={item.person}
           relationLabel={item.relationLabel}
           note={item.note}
-          compact={items.length > 2}
+          compact={items.length > 3}
+          addressHint={item.isInLaw ? "Người liên hệ qua hôn nhân" : undefined}
         />
       ))}
     </div>
+  );
+}
+
+function ToggleButton({
+  active,
+  onClick,
+  label,
+  description,
+}: {
+  active: boolean;
+  onClick: () => void;
+  label: string;
+  description: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={description}
+      className={`rounded-xl border px-3 py-2 text-left text-sm font-semibold transition ${
+        active
+          ? "border-amber-300 bg-amber-100 text-amber-900 shadow-sm"
+          : "border-stone-200 bg-white text-stone-600 hover:bg-stone-50"
+      }`}
+    >
+      <span>{active ? "✓ " : ""}{label}</span>
+      <span className="mt-0.5 block text-[11px] font-normal leading-snug opacity-75">
+        {description}
+      </span>
+    </button>
   );
 }
 
@@ -62,7 +94,7 @@ function RootSummary({ graph }: { graph: LineageComparisonResult }) {
             href={`/dashboard/members?view=tree&rootId=${graph.father.id}`}
             className="mt-1 inline-flex font-semibold text-sky-800 hover:text-sky-950 hover:underline"
           >
-            Mở từ cha: {graph.father.full_name}
+            Mở cây từ cha: {graph.father.full_name}
           </Link>
         ) : (
           <p className="mt-1 text-stone-500">Chưa có cha</p>
@@ -75,7 +107,7 @@ function RootSummary({ graph }: { graph: LineageComparisonResult }) {
             href={`/dashboard/members?view=tree&rootId=${graph.mother.id}`}
             className="mt-1 inline-flex font-semibold text-rose-800 hover:text-rose-950 hover:underline"
           >
-            Mở từ mẹ: {graph.mother.full_name}
+            Mở cây từ mẹ: {graph.mother.full_name}
           </Link>
         ) : (
           <p className="mt-1 text-stone-500">Chưa có mẹ</p>
@@ -92,25 +124,45 @@ export default function DualAncestryPanel({
   familyParents = [],
   familyChildren = [],
 }: DualAncestryPanelProps) {
+  const { user } = useUser();
   const sortedPersons = useMemo(() => {
     return [...persons].sort((a, b) =>
       getDisplayName(a).localeCompare(getDisplayName(b), "vi"),
     );
   }, [persons]);
 
+  const accountKey = user?.id ?? user?.email ?? "local";
+  const rootPreferenceKey = `giapha:root:dual-ancestry:${accountKey}`;
+
   const [rootPersonId, setRootPersonId] = useState<string>(
     sortedPersons[0]?.id ?? "",
   );
+  const [rootPreferenceLoaded, setRootPreferenceLoaded] = useState(false);
+  const [generationsUp, setGenerationsUp] = useState(4);
+  const [generationsDown, setGenerationsDown] = useState(4);
+  const [includeClan, setIncludeClan] = useState(false);
+  const [hideDaughtersInLaw, setHideDaughtersInLaw] = useState(false);
+  const [hideSonsInLaw, setHideSonsInLaw] = useState(false);
 
   useEffect(() => {
     if (sortedPersons.length === 0) return;
-    if (!rootPersonId || !sortedPersons.some((person) => person.id === rootPersonId)) {
+
+    const savedRootId = window.localStorage.getItem(rootPreferenceKey);
+    if (savedRootId && sortedPersons.some((person) => person.id === savedRootId)) {
+      setRootPersonId(savedRootId);
+    } else if (!rootPersonId || !sortedPersons.some((person) => person.id === rootPersonId)) {
       setRootPersonId(sortedPersons[0].id);
     }
-  }, [rootPersonId, sortedPersons]);
 
-  const [generationsUp, setGenerationsUp] = useState(4);
-  const [generationsDown, setGenerationsDown] = useState(4);
+    setRootPreferenceLoaded(true);
+    // Chỉ load lại khi đổi tài khoản hoặc dữ liệu persons đổi.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rootPreferenceKey, sortedPersons]);
+
+  useEffect(() => {
+    if (!rootPreferenceLoaded || !rootPersonId) return;
+    window.localStorage.setItem(rootPreferenceKey, rootPersonId);
+  }, [rootPersonId, rootPreferenceKey, rootPreferenceLoaded]);
 
   const graph = useMemo(() => {
     return buildLineageComparison({
@@ -122,8 +174,13 @@ export default function DualAncestryPanel({
       families,
       familyParents,
       familyChildren,
+      displayOptions: {
+        includeClan,
+        hideDaughtersInLaw,
+        hideSonsInLaw,
+      },
     });
-  }, [rootPersonId, generationsUp, generationsDown, persons, relationships, families, familyParents, familyChildren]);
+  }, [rootPersonId, generationsUp, generationsDown, persons, relationships, families, familyParents, familyChildren, includeClan, hideDaughtersInLaw, hideSonsInLaw]);
 
   if (persons.length === 0) {
     return (
@@ -136,7 +193,7 @@ export default function DualAncestryPanel({
   return (
     <div className="space-y-5">
       <div className="rounded-2xl border border-stone-200 bg-white/90 p-5 shadow-sm">
-        <div className="grid gap-4 lg:grid-cols-[1.6fr_1fr_1fr]">
+        <div className="grid gap-4 xl:grid-cols-[1.6fr_0.8fr_0.8fr]">
           <PersonSelector
             persons={sortedPersons}
             selectedId={rootPersonId}
@@ -179,8 +236,29 @@ export default function DualAncestryPanel({
           </label>
         </div>
 
+        <div className="mt-4 grid gap-2 md:grid-cols-3">
+          <ToggleButton
+            active={includeClan}
+            onClick={() => setIncludeClan((value) => !value)}
+            label="Dòng họ"
+            description="Hiện thêm người cùng hàng: anh em, cô/chú/bác/cậu/dì, con cháu cùng nhánh."
+          />
+          <ToggleButton
+            active={hideDaughtersInLaw}
+            onClick={() => setHideDaughtersInLaw((value) => !value)}
+            label="Ẩn dâu"
+            description="Ẩn các nữ phối ngẫu đi vào dòng họ qua hôn nhân."
+          />
+          <ToggleButton
+            active={hideSonsInLaw}
+            onClick={() => setHideSonsInLaw((value) => !value)}
+            label="Ẩn rể"
+            description="Ẩn các nam phối ngẫu đi vào dòng họ qua hôn nhân."
+          />
+        </div>
+
         <p className="mt-4 text-sm text-stone-500">
-          Bảng này đặt người gốc ở giữa, họ nội ở cột trái, họ ngoại ở cột phải và con cháu ở cột trung tâm để dễ so tương quan thế hệ.
+          Bảng này đặt người gốc ở giữa, họ nội ở cột trái, họ ngoại ở cột phải và con cháu ở cột trung tâm để dễ so tương quan thế hệ. Bật “Dòng họ” để hiện thêm người cùng hàng trong từng đời.
         </p>
       </div>
 
@@ -198,7 +276,7 @@ export default function DualAncestryPanel({
       ) : null}
 
       <div className="overflow-x-auto rounded-2xl border border-stone-200 bg-white shadow-sm">
-        <table className="min-w-[980px] w-full border-collapse text-sm">
+        <table className="min-w-[1100px] w-full border-collapse text-sm">
           <thead className="bg-stone-50 text-left text-xs uppercase tracking-wider text-stone-500">
             <tr>
               <th className="w-36 border-b border-stone-200 px-4 py-3">Đời</th>

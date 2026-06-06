@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { Person, Relationship } from "@/types";
 import PersonSelector from "@/components/PersonSelector";
 import LineagePersonCard from "@/components/LineagePersonCard";
+import { useUser } from "@/components/UserProvider";
 import {
   buildInLawComparison,
   type InLawComparisonResult,
@@ -36,14 +37,45 @@ function InLawCell({ items }: { items: InLawPersonItem[] }) {
     <div className="space-y-2">
       {items.map((item) => (
         <LineagePersonCard
-          key={`${item.person.id}-${item.side}-${item.branch}-${item.generation}`}
+          key={`${item.person.id}-${item.side}-${item.branch}-${item.generation}-${item.isInLaw ? "inlaw" : "blood"}`}
           person={item.person}
           relationLabel={item.relationLabel}
           addressHint={item.addressHint}
-          compact={items.length > 2}
+          note={item.note}
+          compact={items.length > 3}
         />
       ))}
     </div>
+  );
+}
+
+function ToggleButton({
+  active,
+  onClick,
+  label,
+  description,
+}: {
+  active: boolean;
+  onClick: () => void;
+  label: string;
+  description: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={description}
+      className={`rounded-xl border px-3 py-2 text-left text-sm font-semibold transition ${
+        active
+          ? "border-orange-300 bg-orange-100 text-orange-900 shadow-sm"
+          : "border-stone-200 bg-white text-stone-600 hover:bg-stone-50"
+      }`}
+    >
+      <span>{active ? "✓ " : ""}{label}</span>
+      <span className="mt-0.5 block text-[11px] font-normal leading-snug opacity-75">
+        {description}
+      </span>
+    </button>
   );
 }
 
@@ -90,26 +122,45 @@ export default function InLawRelationsPanel({
   familyParents = [],
   familyChildren = [],
 }: InLawRelationsPanelProps) {
+  const { user } = useUser();
   const sortedPersons = useMemo(() => {
     return [...persons].sort((a, b) =>
       getDisplayName(a).localeCompare(getDisplayName(b), "vi"),
     );
   }, [persons]);
 
+  const accountKey = user?.id ?? user?.email ?? "local";
+  const rootPreferenceKey = `giapha:root:in-law-relations:${accountKey}`;
+
   const [rootPersonId, setRootPersonId] = useState<string>(
     sortedPersons[0]?.id ?? "",
   );
+  const [rootPreferenceLoaded, setRootPreferenceLoaded] = useState(false);
   const [selectedSpouseId, setSelectedSpouseId] = useState<string>("");
   const [generationsUp, setGenerationsUp] = useState(3);
   const [generationsDown, setGenerationsDown] = useState(3);
+  const [includeClan, setIncludeClan] = useState(false);
+  const [hideDaughtersInLaw, setHideDaughtersInLaw] = useState(false);
+  const [hideSonsInLaw, setHideSonsInLaw] = useState(false);
 
   useEffect(() => {
     if (sortedPersons.length === 0) return;
-    if (!rootPersonId || !sortedPersons.some((person) => person.id === rootPersonId)) {
+
+    const savedRootId = window.localStorage.getItem(rootPreferenceKey);
+    if (savedRootId && sortedPersons.some((person) => person.id === savedRootId)) {
+      setRootPersonId(savedRootId);
+    } else if (!rootPersonId || !sortedPersons.some((person) => person.id === rootPersonId)) {
       setRootPersonId(sortedPersons[0].id);
-      setSelectedSpouseId("");
     }
-  }, [rootPersonId, sortedPersons]);
+
+    setRootPreferenceLoaded(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rootPreferenceKey, sortedPersons]);
+
+  useEffect(() => {
+    if (!rootPreferenceLoaded || !rootPersonId) return;
+    window.localStorage.setItem(rootPreferenceKey, rootPersonId);
+  }, [rootPersonId, rootPreferenceKey, rootPreferenceLoaded]);
 
   const graph = useMemo(() => {
     return buildInLawComparison({
@@ -122,8 +173,13 @@ export default function InLawRelationsPanel({
       families,
       familyParents,
       familyChildren,
+      displayOptions: {
+        includeClan,
+        hideDaughtersInLaw,
+        hideSonsInLaw,
+      },
     });
-  }, [rootPersonId, selectedSpouseId, generationsUp, generationsDown, persons, relationships, families, familyParents, familyChildren]);
+  }, [rootPersonId, selectedSpouseId, generationsUp, generationsDown, persons, relationships, families, familyParents, familyChildren, includeClan, hideDaughtersInLaw, hideSonsInLaw]);
 
   useEffect(() => {
     if (graph.spouses.length === 0) {
@@ -199,8 +255,29 @@ export default function InLawRelationsPanel({
           </label>
         </div>
 
+        <div className="mt-4 grid gap-2 md:grid-cols-3">
+          <ToggleButton
+            active={includeClan}
+            onClick={() => setIncludeClan((value) => !value)}
+            label="Dòng họ"
+            description="Hiện thêm người cùng hàng hai bên sui gia trong từng đời."
+          />
+          <ToggleButton
+            active={hideDaughtersInLaw}
+            onClick={() => setHideDaughtersInLaw((value) => !value)}
+            label="Ẩn dâu"
+            description="Ẩn các nữ phối ngẫu đi vào dòng họ qua hôn nhân."
+          />
+          <ToggleButton
+            active={hideSonsInLaw}
+            onClick={() => setHideSonsInLaw((value) => !value)}
+            label="Ẩn rể"
+            description="Ẩn các nam phối ngẫu đi vào dòng họ qua hôn nhân."
+          />
+        </div>
+
         <p className="mt-4 text-sm text-stone-500">
-          Bảng sui gia đặt nội/ngoại bên người gốc cạnh nội/ngoại bên vợ/chồng để so thế hệ và gợi ý cách xưng hô khi gặp họ hàng hai bên.
+          Bảng sui gia đặt nội/ngoại bên người gốc cạnh nội/ngoại bên vợ/chồng để so thế hệ và gợi ý cách xưng hô khi gặp họ hàng hai bên. Bật “Dòng họ” để hiện thêm người cùng hàng trong từng nhánh.
         </p>
       </div>
 
@@ -216,7 +293,7 @@ export default function InLawRelationsPanel({
       ) : null}
 
       <div className="overflow-x-auto rounded-2xl border border-stone-200 bg-white shadow-sm">
-        <table className="min-w-[1280px] w-full border-collapse text-sm">
+        <table className="min-w-[1320px] w-full border-collapse text-sm">
           <thead className="bg-stone-50 text-left text-xs uppercase tracking-wider text-stone-500">
             <tr>
               <th className="w-32 border-b border-stone-200 px-4 py-3">Đời</th>

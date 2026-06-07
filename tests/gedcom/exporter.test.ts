@@ -208,3 +208,45 @@ it("exports Vietnamese names in FamilyGem display order when requested", () => {
   expect(out).not.toContain("1 NAME Văn A /Nguyễn/");
 });
 
+
+it("exports marriage and divorce family events to GEDCOM MARR and DIV", () => {
+  const out = exportToGedcom({
+    persons: [
+      { id: "husband", full_name: "Nguyễn Văn Chồng", gender: "male" },
+      { id: "wife", full_name: "Trần Thị Vợ", gender: "female" },
+    ],
+    relationships: [],
+    families: [{ id: "fam-1", status: "divorced" }],
+    family_parents: [
+      { family_id: "fam-1", person_id: "husband", role: "husband" },
+      { family_id: "fam-1", person_id: "wife", role: "wife" },
+    ],
+    family_children: [],
+    events: [
+      {
+        id: "marr-1",
+        type: "marriage",
+        family_id: "fam-1",
+        start_date: "2015-07-21",
+        end_date: "2015-07-21",
+        sort_date: "2015-07-21",
+        date_precision: "day",
+      },
+      {
+        id: "div-1",
+        type: "divorce",
+        family_id: "fam-1",
+        start_date: "2026-06-06",
+        end_date: "2026-06-06",
+        sort_date: "2026-06-06",
+        date_precision: "day",
+      },
+    ],
+    person_events: [],
+  } as any);
+
+  expect(out).toContain("1 MARR");
+  expect(out).toContain("2 DATE 21 JUL 2015");
+  expect(out).toContain("1 DIV");
+  expect(out).toContain("2 DATE 06 JUN 2026");
+});

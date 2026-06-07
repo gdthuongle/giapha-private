@@ -10,6 +10,7 @@ import { useRouter } from "next/navigation";
 import { useCallback, useContext, useEffect, useMemo, useState } from "react";
 import DefaultAvatar from "./DefaultAvatar";
 import { ensureFamilyModelChild } from "@/utils/family/ensureFamilyModelChild";
+import { createFamilyEvent } from "@/app/actions/events";
 
 interface RelationshipManagerProps {
   person: Person;
@@ -98,6 +99,8 @@ export default function RelationshipManager({
     "parent" | "child" | "spouse"
   >("parent");
   const [newRelNote, setNewRelNote] = useState("");
+  const [newMarriageDate, setNewMarriageDate] = useState("");
+  const [newMarriageDatePrecision, setNewMarriageDatePrecision] = useState<"day" | "month" | "year" | "unknown">("unknown");
   const [searchTerm, setSearchTerm] = useState("");
   const [searchResults, setSearchResults] = useState<Person[]>([]);
   const [recentMembers, setRecentMembers] = useState<Person[]>([]);
@@ -131,6 +134,58 @@ export default function RelationshipManager({
   const [newSpouseName, setNewSpouseName] = useState("");
   const [newSpouseBirthYear, setNewSpouseBirthYear] = useState("");
   const [newSpouseNote, setNewSpouseNote] = useState("");
+  const [newSpouseMarriageDate, setNewSpouseMarriageDate] = useState("");
+  const [newSpouseMarriageDatePrecision, setNewSpouseMarriageDatePrecision] = useState<"day" | "month" | "year" | "unknown">("unknown");
+  const [divorceRel, setDivorceRel] = useState<EnrichedRelationship | null>(null);
+  const [divorceDate, setDivorceDate] = useState("");
+  const [divorceDatePrecision, setDivorceDatePrecision] = useState<"day" | "month" | "year" | "unknown">("unknown");
+  const [divorceNote, setDivorceNote] = useState("");
+
+  const buildFamilyEventFormData = ({
+    type,
+    personAId,
+    personBId,
+    familyId,
+    dateText,
+    datePrecision,
+    description,
+  }: {
+    type: "marriage" | "divorce";
+    personAId: string;
+    personBId: string;
+    familyId?: string | null;
+    dateText: string;
+    datePrecision: string;
+    description?: string | null;
+  }) => {
+    const formData = new FormData();
+    formData.set("type", type);
+    formData.set("person_a_id", personAId);
+    formData.set("person_b_id", personBId);
+    if (familyId) formData.set("family_id", familyId);
+    formData.set("date_text", dateText.trim());
+    formData.set("date_precision", dateText.trim() ? datePrecision : "unknown");
+    formData.set("title", type === "marriage" ? "Kết hôn" : "Ly hôn");
+    if (description?.trim()) formData.set("description", description.trim());
+    return formData;
+  };
+
+  const saveFamilyEvent = async (input: {
+    type: "marriage" | "divorce";
+    personAId: string;
+    personBId: string;
+    familyId?: string | null;
+    dateText: string;
+    datePrecision: string;
+    description?: string | null;
+  }) => {
+    if (!input.dateText.trim() && !input.description?.trim()) return;
+
+    const result = await createFamilyEvent(buildFamilyEventFormData(input));
+    if (result?.error) {
+      throw new Error(result.error);
+    }
+  };
 
   // Fetch relationships
   const fetchRelationships = useCallback(async () => {
@@ -596,16 +651,26 @@ export default function RelationshipManager({
 
       if (newRelDirection === "spouse") {
         try {
-          await ensureFamilyModelMarriage({
+          const familyId = await ensureFamilyModelMarriage({
             supabase,
             personId,
             targetPersonId: selectedTargetId,
             legacyRelationshipId: insertedRelationship?.id ?? null,
             note: newRelNote ? newRelNote : null,
           });
+
+          await saveFamilyEvent({
+            type: "marriage",
+            personAId: personId,
+            personBId: selectedTargetId,
+            familyId,
+            dateText: newMarriageDate,
+            datePrecision: newMarriageDatePrecision,
+            description: newRelNote || null,
+          });
         } catch (familyModelError) {
           console.error(
-            "Created legacy spouse relationship but failed to create Family Model marriage:",
+            "Created legacy spouse relationship but failed to create Family Model marriage/event:",
             familyModelError,
           );
           throw familyModelError;
@@ -672,6 +737,8 @@ export default function RelationshipManager({
       setSearchTerm("");
       setSelectedTargetId(null);
       setNewRelNote("");
+      setNewMarriageDate("");
+      setNewMarriageDatePrecision("unknown");
       fetchRelationships();
       router.refresh();
     } catch (err: unknown) {
@@ -894,10 +961,20 @@ export default function RelationshipManager({
 
       if (relError) throw relError;
 
-      await ensureFamilyModelMarriage({
+      const familyId = await ensureFamilyModelMarriage({
         supabase,
         personId,
         targetPersonId: newSpouseId,
+      });
+
+      await saveFamilyEvent({
+        type: "marriage",
+        personAId: personId,
+        personBId: newSpouseId,
+        familyId,
+        dateText: newSpouseMarriageDate,
+        datePrecision: newSpouseMarriageDatePrecision,
+        description: newSpouseNote || null,
       });
 
       setIsAddingSpouse(false);
@@ -965,7 +1042,7 @@ export default function RelationshipManager({
       .map(([familyId]) => familyId);
   };
 
-  const handleDivorce = async (rel: EnrichedRelationship) => {
+  const openDivorceModal = (rel: EnrichedRelationship) => {
     if (!canWriteCurrentPerson()) return;
     if (!isAllowedPerson(rel.targetPerson.id)) {
       denyWrite("Bạn không có quyền ly hôn quan hệ với người ngoài nhánh được phép xem.");
@@ -979,11 +1056,29 @@ export default function RelationshipManager({
       return;
     }
 
-    const ok = confirm(
-      `Đánh dấu ly hôn giữa ${person.full_name} và ${rel.targetPerson.full_name}?\n\nThao tác này không xóa quan hệ, chỉ đổi trạng thái để giữ lịch sử.`,
-    );
+    setDivorceRel(rel);
+    setDivorceDate("");
+    setDivorceDatePrecision("unknown");
+    setDivorceNote(rel.divorce_note ?? "");
+  };
 
-    if (!ok) return;
+  const closeDivorceModal = () => {
+    if (processing) return;
+    setDivorceRel(null);
+    setDivorceDate("");
+    setDivorceDatePrecision("unknown");
+    setDivorceNote("");
+  };
+
+  const handleConfirmDivorce = async () => {
+    const rel = divorceRel;
+    if (!rel) return;
+    if (!canWriteCurrentPerson()) return;
+    if (!isAllowedPerson(rel.targetPerson.id)) {
+      denyWrite("Bạn không có quyền ly hôn quan hệ với người ngoài nhánh được phép xem.");
+      return;
+    }
+    if (rel.type !== "marriage" || rel.direction !== "spouse") return;
 
     setProcessing(true);
     setError(null);
@@ -996,6 +1091,7 @@ export default function RelationshipManager({
         .update({
           status: "divorced",
           ended_at: now.toISOString(),
+          divorce_note: divorceNote.trim() || null,
         })
         .eq("id", rel.id)
         .eq("type", "marriage")
@@ -1009,7 +1105,6 @@ export default function RelationshipManager({
         updated_at: now.toISOString(),
       };
 
-      // 1) Đồng bộ Family Model theo legacy_relationship_id nếu dữ liệu migration có lưu khóa này.
       const { error: legacyFamilyError } = await supabase
         .from("families")
         .update(familyUpdatePayload)
@@ -1018,10 +1113,6 @@ export default function RelationshipManager({
 
       if (legacyFamilyError) throw legacyFamilyError;
 
-      // 2) Đồng bộ theo cặp parent trong family_parents. Đây là đường chính cho dữ liệu
-      // được tạo bằng RPC ensure_family_model_marriage, vì RPC không nhất thiết lưu
-      // legacy_relationship_id. Nếu không update theo cặp, cây vẫn thấy hôn nhân active
-      // và không vẽ nét đứt sau khi bấm ly hôn.
       let sharedFamilyIds = await findSharedMarriageFamilyIds(
         personId,
         rel.targetPerson.id,
@@ -1040,15 +1131,27 @@ export default function RelationshipManager({
       }
 
       if (sharedFamilyIds.length > 0) {
+        const uniqueFamilyIds = Array.from(new Set(sharedFamilyIds));
         const { error: sharedFamilyError } = await supabase
           .from("families")
           .update(familyUpdatePayload)
-          .in("id", Array.from(new Set(sharedFamilyIds)))
+          .in("id", uniqueFamilyIds)
           .is("deleted_at", null);
 
         if (sharedFamilyError) throw sharedFamilyError;
+
+        await saveFamilyEvent({
+          type: "divorce",
+          personAId: personId,
+          personBId: rel.targetPerson.id,
+          familyId: uniqueFamilyIds[0],
+          dateText: divorceDate,
+          datePrecision: divorceDatePrecision,
+          description: divorceNote || null,
+        });
       }
 
+      closeDivorceModal();
       fetchRelationships();
       router.refresh();
     } catch (err: unknown) {
@@ -1260,7 +1363,7 @@ export default function RelationshipManager({
                       <div className="ml-2 flex items-center gap-1 opacity-80 group-hover:opacity-100 transition-opacity">
                         {rel.type === "marriage" && rel.direction === "spouse" && rel.status !== "divorced" && (
                           <button
-                            onClick={() => handleDivorce(rel)}
+                            onClick={() => openDivorceModal(rel)}
                             disabled={processing}
                             className="text-stone-300 hover:text-red-600 hover:bg-red-50 p-2 sm:p-2.5 rounded-lg transition-colors flex items-center justify-center disabled:opacity-50"
                             title="Đánh dấu ly hôn"
@@ -1439,6 +1542,47 @@ export default function RelationshipManager({
               />
             </div>
 
+            {newRelDirection === "spouse" && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label
+                    htmlFor="rel-marriage-date"
+                    className="block text-xs font-medium text-stone-600 mb-1"
+                  >
+                    Ngày kết hôn
+                  </label>
+                  <input
+                    id="rel-marriage-date"
+                    type="text"
+                    inputMode="numeric"
+                    placeholder="dd-mm-yyyy, ví dụ 21-07-2015"
+                    value={newMarriageDate}
+                    onChange={(e) => setNewMarriageDate(e.target.value)}
+                    className="bg-white text-stone-900 placeholder-stone-400 block w-full text-sm rounded-lg border-stone-300 shadow-sm focus:border-amber-500 focus:ring-amber-500 p-2 sm:p-2.5 border transition-colors"
+                  />
+                </div>
+                <div>
+                  <label
+                    htmlFor="rel-marriage-precision"
+                    className="block text-xs font-medium text-stone-600 mb-1"
+                  >
+                    Độ chính xác
+                  </label>
+                  <select
+                    id="rel-marriage-precision"
+                    value={newMarriageDatePrecision}
+                    onChange={(e) => setNewMarriageDatePrecision(e.target.value as any)}
+                    className="bg-white text-stone-900 block w-full text-sm rounded-lg border-stone-300 shadow-sm focus:border-amber-500 focus:ring-amber-500 p-2 sm:p-2.5 border transition-colors"
+                  >
+                    <option value="unknown">Không rõ</option>
+                    <option value="day">Chính xác ngày</option>
+                    <option value="month">Chỉ tháng/năm</option>
+                    <option value="year">Chỉ năm</option>
+                  </select>
+                </div>
+              </div>
+            )}
+
             <div>
               <label
                 htmlFor="rel-direction"
@@ -1579,6 +1723,8 @@ export default function RelationshipManager({
                   setSelectedTargetId(null);
                   setSearchTerm("");
                   setNewRelNote("");
+                  setNewMarriageDate("");
+                  setNewMarriageDatePrecision("unknown");
                 }}
                 className="px-4 py-2 sm:py-2.5 bg-white border border-stone-300 text-stone-700 rounded-md sm:rounded-lg text-sm hover:bg-stone-50 transition-colors"
               >
@@ -1820,6 +1966,45 @@ export default function RelationshipManager({
               />
             </div>
 
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label
+                  htmlFor="spouse-marriage-date"
+                  className="block text-xs font-medium text-stone-600 mb-1"
+                >
+                  Ngày kết hôn
+                </label>
+                <input
+                  id="spouse-marriage-date"
+                  type="text"
+                  inputMode="numeric"
+                  placeholder="dd-mm-yyyy"
+                  value={newSpouseMarriageDate}
+                  onChange={(e) => setNewSpouseMarriageDate(e.target.value)}
+                  className="bg-white text-stone-900 placeholder-stone-400 block w-full text-sm rounded-lg border-stone-300 shadow-sm focus:border-rose-500 focus:ring-rose-500 p-2 sm:p-2.5 border transition-colors"
+                />
+              </div>
+              <div>
+                <label
+                  htmlFor="spouse-marriage-precision"
+                  className="block text-xs font-medium text-stone-600 mb-1"
+                >
+                  Độ chính xác
+                </label>
+                <select
+                  id="spouse-marriage-precision"
+                  value={newSpouseMarriageDatePrecision}
+                  onChange={(e) => setNewSpouseMarriageDatePrecision(e.target.value as any)}
+                  className="bg-white text-stone-900 block w-full text-sm rounded-lg border-stone-300 shadow-sm focus:border-rose-500 focus:ring-rose-500 p-2 sm:p-2.5 border transition-colors"
+                >
+                  <option value="unknown">Không rõ</option>
+                  <option value="day">Chính xác ngày</option>
+                  <option value="month">Chỉ tháng/năm</option>
+                  <option value="year">Chỉ năm</option>
+                </select>
+              </div>
+            </div>
+
             <div>
               <label
                 htmlFor="spouse-note"
@@ -1862,6 +2047,8 @@ export default function RelationshipManager({
                   setNewSpouseName("");
                   setNewSpouseBirthYear("");
                   setNewSpouseNote("");
+                  setNewSpouseMarriageDate("");
+                  setNewSpouseMarriageDatePrecision("unknown");
                 }}
                 className="px-4 py-2 sm:py-2.5 bg-white border border-stone-300 text-stone-700 rounded-md sm:rounded-lg text-sm hover:bg-stone-50 transition-colors"
               >
@@ -1889,6 +2076,101 @@ export default function RelationshipManager({
           </div>
         </div>
       )}
+
+      {divorceRel && (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-stone-900/40 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-2xl border border-stone-200 bg-white p-5 shadow-2xl">
+            <h4 className="text-base font-bold text-stone-900">
+              Xác nhận ly hôn
+            </h4>
+            <p className="mt-1 text-sm text-stone-600">
+              {person.full_name} và {divorceRel.targetPerson.full_name}
+            </p>
+
+            <div className="mt-4 space-y-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div>
+                  <label
+                    htmlFor="divorce-date"
+                    className="mb-1 block text-xs font-medium text-stone-600"
+                  >
+                    Ngày ly hôn
+                  </label>
+                  <input
+                    id="divorce-date"
+                    type="text"
+                    inputMode="numeric"
+                    placeholder="dd-mm-yyyy"
+                    value={divorceDate}
+                    onChange={(e) => setDivorceDate(e.target.value)}
+                    className="block w-full rounded-lg border border-stone-300 bg-white p-2 text-sm text-stone-900 placeholder-stone-400 shadow-sm focus:border-red-500 focus:ring-red-500"
+                  />
+                </div>
+                <div>
+                  <label
+                    htmlFor="divorce-date-precision"
+                    className="mb-1 block text-xs font-medium text-stone-600"
+                  >
+                    Độ chính xác
+                  </label>
+                  <select
+                    id="divorce-date-precision"
+                    value={divorceDatePrecision}
+                    onChange={(e) => setDivorceDatePrecision(e.target.value as any)}
+                    className="block w-full rounded-lg border border-stone-300 bg-white p-2 text-sm text-stone-900 shadow-sm focus:border-red-500 focus:ring-red-500"
+                  >
+                    <option value="unknown">Không rõ</option>
+                    <option value="day">Chính xác ngày</option>
+                    <option value="month">Chỉ tháng/năm</option>
+                    <option value="year">Chỉ năm</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label
+                  htmlFor="divorce-note"
+                  className="mb-1 block text-xs font-medium text-stone-600"
+                >
+                  Ghi chú ly hôn
+                </label>
+                <textarea
+                  id="divorce-note"
+                  rows={3}
+                  value={divorceNote}
+                  onChange={(e) => setDivorceNote(e.target.value)}
+                  placeholder="Tuỳ chọn..."
+                  className="block w-full rounded-lg border border-stone-300 bg-white p-2 text-sm text-stone-900 placeholder-stone-400 shadow-sm focus:border-red-500 focus:ring-red-500"
+                />
+              </div>
+
+              <p className="text-xs leading-relaxed text-stone-500">
+                Nếu nhập ngày, hệ thống sẽ tạo sự kiện ly hôn trong Event Model và GEDCOM export sẽ có DIV.
+              </p>
+            </div>
+
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={closeDivorceModal}
+                disabled={processing}
+                className="rounded-lg border border-stone-300 bg-white px-4 py-2 text-sm font-medium text-stone-700 hover:bg-stone-50 disabled:opacity-50"
+              >
+                Hủy
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDivorce}
+                disabled={processing}
+                className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-50"
+              >
+                {processing ? "Đang lưu..." : "Xác nhận ly hôn"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }

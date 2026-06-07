@@ -299,6 +299,148 @@ function buildEventPayload(formData: FormData) {
   };
 }
 
+async function assertCanManageFamilyEvent(
+  personAId: string,
+  personBId: string,
+  action: string,
+  eventId?: string | null,
+) {
+  const first = await assertCanManagePersonEvent(personAId, action, eventId);
+  if (!first.ok) return first;
+
+  const second = await assertCanManagePersonEvent(personBId, action, eventId);
+  if (!second.ok) return second;
+
+  return { ok: true as const };
+}
+
+export async function createFamilyEvent(formData: FormData) {
+  const personAId = cleanText(formData.get("person_a_id"));
+  const personBId = cleanText(formData.get("person_b_id"));
+  const familyId = cleanText(formData.get("family_id"));
+  const eventType = normalizeEventType(formData.get("type"));
+
+  if (!personAId || !personBId) {
+    return { error: "Thiếu thông tin hai người liên quan đến sự kiện." };
+  }
+
+  if (eventType !== "marriage" && eventType !== "divorce") {
+    return { error: "Sự kiện gia đình chỉ hỗ trợ kết hôn hoặc ly hôn." };
+  }
+
+  const permission = await assertCanManageFamilyEvent(
+    personAId,
+    personBId,
+    `event.${eventType}.create`,
+  );
+
+  if (!permission.ok) return { error: permission.error };
+
+  try {
+    const supabase = await getSupabase();
+    const eventPayload = {
+      ...buildEventPayload(formData),
+      type: eventType,
+      family_id: familyId,
+      legacy_source:
+        eventType === "marriage"
+          ? "manual.marriage_event"
+          : "manual.divorce_event",
+    };
+
+    // Tránh tạo nhiều event cùng loại cho cùng family khi người dùng bấm lưu lặp.
+    // Nếu có family_id, update event cùng family/type mới nhất thay vì tạo trùng.
+    let existingEventId: string | null = null;
+
+    if (familyId) {
+      const { data: existing, error: existingError } = await supabase
+        .from("events")
+        .select("id")
+        .eq("family_id", familyId)
+        .eq("type", eventType)
+        .is("deleted_at", null)
+        .order("sort_date", { ascending: false, nullsFirst: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (existingError) return { error: existingError.message };
+      existingEventId = existing?.id ?? null;
+    }
+
+    let eventId = existingEventId;
+
+    if (eventId) {
+      const { error: updateError } = await supabase
+        .from("events")
+        .update(eventPayload)
+        .eq("id", eventId)
+        .is("deleted_at", null);
+
+      if (updateError) return { error: updateError.message };
+    } else {
+      const { data: eventRow, error: eventError } = await supabase
+        .from("events")
+        .insert(eventPayload)
+        .select("id")
+        .single();
+
+      if (eventError || !eventRow) {
+        return { error: eventError?.message ?? "Không tạo được sự kiện gia đình." };
+      }
+
+      eventId = eventRow.id;
+    }
+
+    for (const personId of [personAId, personBId]) {
+      const { data: existingLink, error: linkCheckError } = await supabase
+        .from("person_events")
+        .select("id")
+        .eq("person_id", personId)
+        .eq("event_id", eventId)
+        .limit(1)
+        .maybeSingle();
+
+      if (linkCheckError) return { error: linkCheckError.message };
+
+      if (!existingLink) {
+        const { error: linkError } = await supabase.from("person_events").insert({
+          person_id: personId,
+          event_id: eventId,
+          role: "principal",
+        });
+
+        if (linkError) return { error: linkError.message };
+      }
+    }
+
+    await recordAuditLog({
+      action: eventType === "marriage" ? "event.marriage_saved" : "event.divorce_saved",
+      entityType: "event",
+      entityId: eventId,
+      entityLabel: eventPayload.title ?? eventPayload.type,
+      metadata: {
+        familyId,
+        personAId,
+        personBId,
+        type: eventType,
+      },
+    });
+
+    revalidatePath(`/dashboard/members/${personAId}`);
+    revalidatePath(`/dashboard/members/${personBId}`);
+    revalidatePath("/dashboard/events");
+
+    return { success: true, eventId };
+  } catch (error) {
+    return {
+      error:
+        error instanceof Error
+          ? error.message
+          : "Không lưu được sự kiện gia đình.",
+    };
+  }
+}
+
 export async function createPersonEvent(formData: FormData) {
   const personId = cleanText(formData.get("person_id"));
   if (!personId) return { error: "Thiếu person_id." };

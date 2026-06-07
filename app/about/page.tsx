@@ -84,7 +84,7 @@ export default function AboutPage() {
                     <strong className="text-stone-800">Demo công khai:</strong>{" "}
                     Trang demo tại{" "}
                     <code className="bg-white border border-stone-200 px-1 py-0.5 rounded text-[13px] text-amber-700">
-                      giapha.thuongle.net
+                      demo.thuongle.net
                     </code>{" "}
                     sử dụng dữ liệu mẫu hư cấu, không chứa thông tin của người
                     thật. Không nên nhập thông tin cá nhân thật vào trang demo.

@@ -18,7 +18,8 @@ export type AuditAction =
   | "gedcom.parse_staging"
   | "gedcom.commit_staging_session"
   | "family_model.repair"
-  | "account.preferences_updated";
+  | "account.preferences_updated"
+  | "permission.denied";
 
 export type AuditEntityType =
   | "user"

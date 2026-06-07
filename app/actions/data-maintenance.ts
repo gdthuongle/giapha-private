@@ -3,8 +3,12 @@
 import { recordAuditLog } from "@/services/audit/auditLog.service";
 import { revalidatePath } from "next/cache";
 import { getSupabase } from "@/utils/supabase/queries";
+import { assertAdminAction } from "@/utils/permissions/assertPersonAccess";
 
 export async function repairEventsMissingPersonLinks() {
+  const permission = await assertAdminAction("data_maintenance.repair_events_missing_links", "data_maintenance");
+  if (!permission.ok) return { ok: false as const, error: permission.error ?? "Chỉ quản trị viên mới được thực hiện thao tác này." };
+
   const supabase = await getSupabase();
 
   const { data, error } = await supabase.rpc(
@@ -36,6 +40,9 @@ export async function repairEventsMissingPersonLinks() {
   };
 }
 export async function softDeleteEmptyFamilies() {
+  const permission = await assertAdminAction("data_maintenance.soft_delete_empty_families", "data_maintenance");
+  if (!permission.ok) return { ok: false as const, error: permission.error ?? "Chỉ quản trị viên mới được thực hiện thao tác này." };
+
   const supabase = await getSupabase();
 
   const { data, error } = await supabase.rpc("soft_delete_empty_families");
@@ -66,6 +73,9 @@ export async function softDeleteEmptyFamilies() {
   };
 }
 export async function softDeleteDuplicateBirthDeathEvents() {
+  const permission = await assertAdminAction("data_maintenance.soft_delete_duplicate_events", "data_maintenance");
+  if (!permission.ok) return { ok: false as const, error: permission.error ?? "Chỉ quản trị viên mới được thực hiện thao tác này." };
+
   const supabase = await getSupabase();
 
   const { data, error } = await supabase.rpc(

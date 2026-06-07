@@ -3,6 +3,7 @@
 import { recordAuditLog } from "@/services/audit/auditLog.service";
 import { revalidatePath } from "next/cache";
 import { getSupabase } from "@/utils/supabase/queries";
+import { assertAdminAction } from "@/utils/permissions/assertPersonAccess";
 
 type GedcomCommitRpcResult = {
   ok: boolean;
@@ -37,6 +38,17 @@ function emptyCommitted(): GedcomCommitRpcResult["committed"] {
 export async function commitGedcomStagingSession(input: {
   sessionId: string;
 }): Promise<GedcomCommitRpcResult> {
+  const permission = await assertAdminAction("gedcom.commit_staging_session", "gedcom_session");
+  if (!permission.ok) {
+    return {
+      ok: false,
+      sessionId: input.sessionId,
+      committed: emptyCommitted(),
+      errors: [permission.error ?? "Chỉ quản trị viên mới được commit GEDCOM."],
+      warnings: [],
+    };
+  }
+
   const supabase = await getSupabase();
 
   const { data, error } = await supabase.rpc("commit_gedcom_staging_session", {

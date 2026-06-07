@@ -62,6 +62,20 @@ export default function RelationshipManager({
     [allowedPersonIdSet],
   );
 
+
+  const denyWrite = useCallback((message = "Bạn không có quyền sửa dữ liệu này.") => {
+    setError(message);
+    setTimeout(() => setError(null), 5000);
+  }, []);
+
+  const canWriteCurrentPerson = useCallback(() => {
+    if (!canEdit || !isAllowedPerson(personId)) {
+      denyWrite("Bạn không có quyền sửa người ngoài nhánh được phép xem.");
+      return false;
+    }
+    return true;
+  }, [canEdit, denyWrite, isAllowedPerson, personId]);
+
   // If inside DashboardProvider → open modal; otherwise → navigate to full page
   const handlePersonClick = (id: string) => {
     if (memberListContext !== undefined) {
@@ -530,6 +544,7 @@ export default function RelationshipManager({
   }, [isAdding, personId, supabase, recentMembers.length, isAllowedPerson]);
 
   const handleAddRelationship = async () => {
+    if (!canWriteCurrentPerson()) return;
     if (!selectedTargetId) return;
     if (!isAllowedPerson(selectedTargetId)) {
       setError("Bạn không có quyền tạo quan hệ với người ngoài nhánh được phép xem.");
@@ -693,6 +708,12 @@ export default function RelationshipManager({
   };
 
   const handleBulkAdd = async () => {
+    if (!canWriteCurrentPerson()) return;
+    if (selectedSpouseId && selectedSpouseId !== "unknown" && !isAllowedPerson(selectedSpouseId)) {
+      denyWrite("Bạn không có quyền thêm con với vợ/chồng ngoài nhánh được phép xem.");
+      return;
+    }
+
     // Filter out rows without a name
     const validChildren = bulkChildren.filter((c) => c.name.trim() !== "");
     if (validChildren.length === 0) {
@@ -812,6 +833,7 @@ export default function RelationshipManager({
   };
 
   const handleQuickAddSpouse = async () => {
+    if (!canWriteCurrentPerson()) return;
     if (!newSpouseName.trim()) {
       setError("Vui lòng nhập tên Vợ/Chồng.");
       setTimeout(() => setError(null), 5000);
@@ -893,7 +915,12 @@ export default function RelationshipManager({
     }
   };
 
-  const handleDelete = async (relId: string) => {
+  const handleDelete = async (rel: EnrichedRelationship) => {
+    if (!canWriteCurrentPerson()) return;
+    if (!isAllowedPerson(rel.targetPerson.id)) {
+      denyWrite("Bạn không có quyền xóa quan hệ với người ngoài nhánh được phép xem.");
+      return;
+    }
     if (!confirm("Bạn có chắc chắn muốn xóa mối quan hệ này?")) return;
     try {
       const { error } = await supabase
@@ -901,7 +928,7 @@ export default function RelationshipManager({
        .update({
          deleted_at: new Date().toISOString(),
        })
-       .eq("id", relId)
+       .eq("id", rel.id)
        .is("deleted_at", null);
       if (error) throw error;
       fetchRelationships();
@@ -939,6 +966,11 @@ export default function RelationshipManager({
   };
 
   const handleDivorce = async (rel: EnrichedRelationship) => {
+    if (!canWriteCurrentPerson()) return;
+    if (!isAllowedPerson(rel.targetPerson.id)) {
+      denyWrite("Bạn không có quyền ly hôn quan hệ với người ngoài nhánh được phép xem.");
+      return;
+    }
     if (rel.type !== "marriage" || rel.direction !== "spouse") return;
 
     if (rel.status === "divorced") {
@@ -1029,6 +1061,11 @@ export default function RelationshipManager({
   };
 
   const handleRestoreMarriage = async (rel: EnrichedRelationship) => {
+    if (!canWriteCurrentPerson()) return;
+    if (!isAllowedPerson(rel.targetPerson.id)) {
+      denyWrite("Bạn không có quyền khôi phục quan hệ với người ngoài nhánh được phép xem.");
+      return;
+    }
     if (rel.type !== "marriage" || rel.direction !== "spouse") return;
 
     if (rel.status !== "divorced") {
@@ -1274,7 +1311,7 @@ export default function RelationshipManager({
                         )}
 
                         <button
-                          onClick={() => handleDelete(rel.id)}
+                          onClick={() => handleDelete(rel)}
                           className="text-stone-300 hover:text-red-500 hover:bg-red-50 p-2 sm:p-2.5 rounded-lg transition-colors flex items-center justify-center"
                           title="Xóa mối quan hệ"
                           aria-label="Xóa mối quan hệ"

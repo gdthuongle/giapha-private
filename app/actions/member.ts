@@ -2,6 +2,7 @@
 
 import { recordAuditLog } from "@/services/audit/auditLog.service";
 import { getProfile, getSupabase } from "@/utils/supabase/queries";
+import { assertCanEditPerson } from "@/utils/permissions/assertPersonAccess";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
@@ -13,6 +14,16 @@ export async function deleteMemberProfile(memberId: string) {
     return {
       error: "Từ chối truy cập. Chỉ Admin hoặc Editor mới có quyền xoá hồ sơ.",
     };
+  }
+
+  const permission = await assertCanEditPerson(memberId, {
+    action: "member.delete",
+    entityType: "person",
+    entityId: memberId,
+  });
+
+  if (!permission.ok) {
+    return { error: permission.error ?? "Bạn không có quyền xoá hồ sơ này." };
   }
 
   // 2. Check for existing relationships

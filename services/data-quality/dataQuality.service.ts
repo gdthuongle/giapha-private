@@ -377,6 +377,40 @@ function checkEventQuality(input: {
         suggestion: "Sửa lại normalizeDate hoặc dữ liệu event.",
       });
     }
+
+    if ((event.type === "marriage" || event.type === "divorce") && event.family_id && !input.activeFamilyIds.has(event.family_id)) {
+      input.issues.push({
+        id: `event:${event.id}:missing-family`,
+        category: "event",
+        severity: "error",
+        title: "Event hôn nhân/ly hôn trỏ tới family không active",
+        description: `Event ${event.id} (${event.type}) có family_id=${event.family_id}, nhưng family này không active hoặc không tồn tại.`,
+        entityType: "event",
+        entityId: event.id,
+        relatedIds: [event.family_id],
+        suggestion: "Gắn event vào family active hoặc xóa/soft-delete event sai.",
+      });
+    }
+
+    const hasSomeLunar = Boolean(
+      (event as any).lunar_year || (event as any).lunar_month || (event as any).lunar_day,
+    );
+    const hasFullLunar = Boolean(
+      (event as any).lunar_year && (event as any).lunar_month && (event as any).lunar_day,
+    );
+
+    if (hasSomeLunar && !hasFullLunar) {
+      input.issues.push({
+        id: `event:${event.id}:incomplete-lunar-date`,
+        category: "event",
+        severity: "warning",
+        title: "Event có ngày âm lịch chưa đủ",
+        description: `Event ${event.id} có một phần ngày âm lịch nhưng thiếu năm/tháng/ngày âm.`,
+        entityType: "event",
+        entityId: event.id,
+        suggestion: "Bổ sung đủ lunar_year, lunar_month, lunar_day hoặc xóa phần ngày âm nếu không dùng.",
+      });
+    }
   }
 
   const eventIdsWithPerson = new Set(
@@ -468,7 +502,34 @@ function checkEventQuality(input: {
       });
     }
 
+    const hasLegacyBirthDate = Boolean(person.birth_year || person.birth_month || person.birth_day);
     const hasLegacyDeathDate = Boolean(person.death_year || person.death_month || person.death_day);
+
+    if (hasLegacyBirthDate && !birthEvent) {
+      input.issues.push({
+        id: `person:${person.id}:legacy-birth-without-event`,
+        category: "event",
+        severity: "info",
+        title: "Person có ngày sinh legacy nhưng thiếu birth event",
+        description: `Person ${person.id} có birth_year/birth_month/birth_day nhưng chưa có birth event active.`,
+        entityType: "person",
+        entityId: person.id,
+        suggestion: "Có thể chạy migration/repair đồng bộ legacy birth sang Event Model nếu muốn dùng Event Model làm nguồn chuẩn.",
+      });
+    }
+
+    if (hasLegacyDeathDate && !deathEvent) {
+      input.issues.push({
+        id: `person:${person.id}:legacy-death-without-event`,
+        category: "event",
+        severity: "info",
+        title: "Person có ngày mất legacy nhưng thiếu death event",
+        description: `Person ${person.id} có death_year/death_month/death_day nhưng chưa có death event active.`,
+        entityType: "person",
+        entityId: person.id,
+        suggestion: "Có thể chạy migration/repair đồng bộ legacy death sang Event Model nếu muốn dùng Event Model làm nguồn chuẩn.",
+      });
+    }
 
     if (person.is_deceased === true && !deathEvent && !hasLegacyDeathDate) {
       input.issues.push({

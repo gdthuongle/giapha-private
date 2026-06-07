@@ -5,7 +5,7 @@ import {
   softDeletePersonEvent,
   updatePersonEvent,
 } from "@/app/actions/events";
-import type { TimelineEvent } from "@/components/PersonTimeline";
+import { PersonTimeline, type TimelineEvent } from "@/components/PersonTimeline";
 import { createClient } from "@/utils/supabase/client";
 import { CalendarDays, Edit3, Plus, Trash2, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
@@ -225,46 +225,38 @@ export default function PersonEventsPanel({
         />
       ) : null}
 
-      {canEdit && sortedEvents.length > 0 ? (
-        <div className="mb-5 space-y-2">
-          {sortedEvents.map((event) => (
-            <div
-              key={event.id}
-              className="flex items-center justify-between gap-3 rounded-xl border border-stone-200/70 bg-stone-50/70 px-3 py-2"
-            >
-              <div className="min-w-0">
-                <p className="truncate text-sm font-bold text-stone-800">
-                  {event.title || getEventTypeLabel(event.type)}
-                </p>
-                <p className="text-xs text-stone-500">
-                  {getEventTypeLabel(event.type)} · {formatEventDateSummary(event)}
-                </p>
-              </div>
-              <div className="flex shrink-0 items-center gap-1">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setError(null);
-                    setMessage(null);
-                    setEditing({ mode: "edit", event });
-                  }}
-                  className="rounded-lg p-2 text-stone-400 transition hover:bg-amber-50 hover:text-amber-700"
-                  title="Sửa sự kiện"
-                >
-                  <Edit3 className="size-4" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleDelete(event)}
-                  className="rounded-lg p-2 text-stone-400 transition hover:bg-red-50 hover:text-red-600"
-                  title="Xóa sự kiện"
-                >
-                  <Trash2 className="size-4" />
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
+      {!loading && sortedEvents.length > 0 ? (
+        <PersonTimeline
+          events={sortedEvents}
+          renderActions={
+            canEdit
+              ? (event) => (
+                  <div className="flex shrink-0 items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setError(null);
+                        setMessage(null);
+                        setEditing({ mode: "edit", event: event as EditableTimelineEvent });
+                      }}
+                      className="rounded-lg p-2 text-stone-400 transition hover:bg-amber-50 hover:text-amber-700"
+                      title="Sửa sự kiện"
+                    >
+                      <Edit3 className="size-4" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleDelete(event as EditableTimelineEvent)}
+                      className="rounded-lg p-2 text-stone-400 transition hover:bg-red-50 hover:text-red-600"
+                      title="Xóa sự kiện"
+                    >
+                      <Trash2 className="size-4" />
+                    </button>
+                  </div>
+                )
+              : undefined
+          }
+        />
       ) : null}
 
       {!loading && sortedEvents.length === 0 ? (

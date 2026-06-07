@@ -5,7 +5,7 @@ import {
   softDeletePersonEvent,
   updatePersonEvent,
 } from "@/app/actions/events";
-import { PersonTimeline, type TimelineEvent } from "@/components/PersonTimeline";
+import type { TimelineEvent } from "@/components/PersonTimeline";
 import { createClient } from "@/utils/supabase/client";
 import { CalendarDays, Edit3, Plus, Trash2, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
@@ -41,9 +41,9 @@ const EVENT_TYPES = [
 ];
 
 const PRECISIONS = [
-  { value: "day", label: "Chính xác ngày", placeholder: "YYYY-MM-DD" },
-  { value: "month", label: "Chỉ tháng/năm", placeholder: "YYYY-MM" },
-  { value: "year", label: "Chỉ năm", placeholder: "YYYY" },
+  { value: "day", label: "Chính xác ngày", placeholder: "dd-mm-yyyy, ví dụ 21-07-2015" },
+  { value: "month", label: "Chỉ tháng/năm", placeholder: "mm-yyyy, ví dụ 07-2015" },
+  { value: "year", label: "Chỉ năm", placeholder: "yyyy, ví dụ 2015" },
   { value: "unknown", label: "Không rõ ngày", placeholder: "Để trống" },
 ];
 
@@ -267,7 +267,11 @@ export default function PersonEventsPanel({
         </div>
       ) : null}
 
-      <PersonTimeline events={sortedEvents} />
+      {!loading && sortedEvents.length === 0 ? (
+        <div className="rounded-2xl border border-stone-200 bg-stone-50 px-4 py-5 text-sm text-stone-500">
+          Chưa có sự kiện nào.
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -363,6 +367,7 @@ function EventForm({
           Ngày dương lịch
           <input
             name="date_text"
+            inputMode="numeric"
             defaultValue={getEventDateInputValue(event)}
             disabled={precision === "unknown"}
             placeholder={precisionInfo.placeholder}
@@ -450,6 +455,18 @@ function EventForm({
   );
 }
 
+function formatIsoDateForInput(value: string) {
+  const match = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return value;
+  return `${match[3]}-${match[2]}-${match[1]}`;
+}
+
+function formatIsoMonthForInput(value: string) {
+  const match = value.match(/^(\d{4})-(\d{2})/);
+  if (!match) return value;
+  return `${match[2]}-${match[1]}`;
+}
+
 function getEventTypeLabel(type: string) {
   return EVENT_TYPES.find((item) => item.value === type)?.label ?? type;
 }
@@ -457,13 +474,13 @@ function getEventTypeLabel(type: string) {
 function getEventDateInputValue(event: EditableTimelineEvent | null) {
   if (!event?.start_date) return "";
   if (event.date_precision === "year") return event.start_date.slice(0, 4);
-  if (event.date_precision === "month") return event.start_date.slice(0, 7);
-  return event.start_date.slice(0, 10);
+  if (event.date_precision === "month") return formatIsoMonthForInput(event.start_date);
+  return formatIsoDateForInput(event.start_date);
 }
 
 function formatEventDateSummary(event: EditableTimelineEvent) {
   if (!event.start_date) return "Chưa rõ ngày";
   if (event.date_precision === "year") return event.start_date.slice(0, 4);
-  if (event.date_precision === "month") return event.start_date.slice(0, 7);
-  return event.start_date.slice(0, 10);
+  if (event.date_precision === "month") return formatIsoMonthForInput(event.start_date);
+  return formatIsoDateForInput(event.start_date);
 }

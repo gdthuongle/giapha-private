@@ -270,13 +270,12 @@ export default function AdminUserList({
     const currentRootId = editingUser.default_tree_root_id ?? null;
     const currentPersonId = editingUser.person_id ?? null;
 
-    const onlyRootChanged =
+    const onlySafeDemoProfileLinkChanged =
       nextEmail === currentEmail &&
       nextName === currentName &&
       nextRole === editingUser.role &&
       nextActive === editingUser.is_active &&
-      nextRootId !== currentRootId &&
-      nextPersonId === currentPersonId;
+      (nextRootId !== currentRootId || nextPersonId !== currentPersonId);
 
     const hasNoChange =
       nextEmail === currentEmail &&
@@ -291,7 +290,7 @@ export default function AdminUserList({
       return;
     }
 
-    if (isDemo && !onlyRootChanged) {
+    if (isDemo && !onlySafeDemoProfileLinkChanged) {
       showNotification(
         "Đây là tài khoản demo cho mọi người sử dụng, vui lòng không thay đổi thông tin này.",
         "info",

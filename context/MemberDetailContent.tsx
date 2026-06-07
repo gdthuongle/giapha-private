@@ -45,7 +45,7 @@ export default function MemberDetailContent({
   allowedPersonIds = null,
 }: MemberDetailContentProps) {
   const [isNoteExpanded, setIsNoteExpanded] = useState(false);
-  const [activeDetailTab, setActiveDetailTab] = useState<"note" | "family" | "events">("note");
+  const [activeDetailTab, setActiveDetailTab] = useState<"note" | "family" | "events">("family");
   const [relStats, setRelStats] = useState<{
     biologicalChildren: number;
     maleBiologicalChildren: number;
@@ -515,8 +515,8 @@ export default function MemberDetailContent({
             <div className="rounded-2xl border border-stone-200/70 bg-white/80 p-1 shadow-sm backdrop-blur-sm">
               <div className="grid grid-cols-3 gap-1">
                 {[
-                  { key: "note", label: "Thông tin", icon: Info },
                   { key: "family", label: "Quan hệ", icon: Users },
+                  { key: "note", label: "Thông tin", icon: Info },
                   { key: "events", label: "Sự kiện", icon: CalendarDays },
                 ].map((tab) => {
                   const Icon = tab.icon;

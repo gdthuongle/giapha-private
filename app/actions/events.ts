@@ -68,6 +68,52 @@ function lastDayOfMonth(year: number, month: number) {
   return new Date(Date.UTC(year, month, 0)).getUTCDate();
 }
 
+function toIsoDay(raw: string) {
+  const value = raw.trim();
+
+  const ddmmyyyy = value.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})$/);
+  if (ddmmyyyy) {
+    const day = Number(ddmmyyyy[1]);
+    const month = Number(ddmmyyyy[2]);
+    const year = Number(ddmmyyyy[3]);
+    const iso = `${String(year).padStart(4, "0")}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+    return isValidDate(iso) ? iso : null;
+  }
+
+  const yyyymmdd = value.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+  if (yyyymmdd) {
+    const year = Number(yyyymmdd[1]);
+    const month = Number(yyyymmdd[2]);
+    const day = Number(yyyymmdd[3]);
+    const iso = `${String(year).padStart(4, "0")}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+    return isValidDate(iso) ? iso : null;
+  }
+
+  return null;
+}
+
+function toIsoMonth(raw: string) {
+  const value = raw.trim();
+
+  const mmyyyy = value.match(/^(\d{1,2})[-/](\d{4})$/);
+  if (mmyyyy) {
+    const month = Number(mmyyyy[1]);
+    const year = Number(mmyyyy[2]);
+    if (month < 1 || month > 12) return null;
+    return { year, month };
+  }
+
+  const yyyymm = value.match(/^(\d{4})-(\d{1,2})$/);
+  if (yyyymm) {
+    const year = Number(yyyymm[1]);
+    const month = Number(yyyymm[2]);
+    if (month < 1 || month > 12) return null;
+    return { year, month };
+  }
+
+  return null;
+}
+
 function normalizePersonEventDate(input: {
   dateText: string | null;
   precision: string;
@@ -88,36 +134,30 @@ function normalizePersonEventDate(input: {
   }
 
   if (precision === "day") {
-    if (!isValidDate(raw)) {
-      throw new Error("Ngày chính xác phải có dạng YYYY-MM-DD.");
+    const iso = toIsoDay(raw);
+    if (!iso) {
+      throw new Error("Ngày chính xác phải có dạng dd-mm-yyyy, ví dụ 21-07-2015.");
     }
 
     return {
-      start_date: raw,
-      end_date: raw,
-      sort_date: raw,
+      start_date: iso,
+      end_date: iso,
+      sort_date: iso,
       date_precision: "day",
       date_original_text: raw,
     };
   }
 
   if (precision === "month") {
-    const match = raw.match(/^(\d{4})-(\d{2})$/);
-    if (!match) {
-      throw new Error("Ngày tháng/năm phải có dạng YYYY-MM.");
+    const parsed = toIsoMonth(raw);
+    if (!parsed) {
+      throw new Error("Ngày tháng/năm phải có dạng mm-yyyy, ví dụ 07-2015.");
     }
 
-    const year = Number(match[1]);
-    const month = Number(match[2]);
-
-    if (month < 1 || month > 12) {
-      throw new Error("Tháng phải nằm trong khoảng 01-12.");
-    }
-
-    const paddedYear = String(year).padStart(4, "0");
-    const paddedMonth = String(month).padStart(2, "0");
-    const start = `${paddedYear}-${paddedMonth}-01`;
-    const end = `${paddedYear}-${paddedMonth}-${String(
+    const year = parsed.year;
+    const month = parsed.month;
+    const start = `${String(year).padStart(4, "0")}-${String(month).padStart(2, "0")}-01`;
+    const end = `${String(year).padStart(4, "0")}-${String(month).padStart(2, "0")}-${String(
       lastDayOfMonth(year, month),
     ).padStart(2, "0")}`;
 
@@ -133,7 +173,7 @@ function normalizePersonEventDate(input: {
   if (precision === "year") {
     const match = raw.match(/^(\d{1,4})$/);
     if (!match) {
-      throw new Error("Năm phải có dạng YYYY.");
+      throw new Error("Năm phải có dạng yyyy, ví dụ 2015.");
     }
 
     const year = String(Number(match[1])).padStart(4, "0");
@@ -284,7 +324,6 @@ export async function createPersonEvent(formData: FormData) {
       person_id: personId,
       event_id: eventRow.id,
       role: eventPayload.type === "death" ? "deceased" : "principal",
-      sort_order: 0,
     });
 
     if (linkError) {

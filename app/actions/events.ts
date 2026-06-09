@@ -329,17 +329,161 @@ function normalizeRelatedPersonIds(values: FormDataEntryValue[]) {
 }
 
 function buildWeddingDescription(input: {
+  announcementText: string | null;
   timeText: string | null;
   invitationText: string | null;
   description: string | null;
 }) {
   const parts: string[] = [];
 
+  if (input.announcementText) parts.push(input.announcementText);
   if (input.timeText) parts.push(`Thời gian: ${input.timeText}`);
   if (input.invitationText) parts.push(`Nội dung thiệp cưới:\n${input.invitationText}`);
   if (input.description) parts.push(input.description);
 
   return parts.join("\n\n") || null;
+}
+
+type PersonBrief = {
+  id: string;
+  full_name: string;
+  gender?: string | null;
+};
+
+type SupabaseClientLike = Awaited<ReturnType<typeof getSupabase>>;
+
+function formatParentLine(person: PersonBrief | null, parents: PersonBrief[]) {
+  if (!person) return null;
+
+  const father = parents.find((parent) => parent.gender === "male");
+  const mother = parents.find((parent) => parent.gender === "female");
+  const otherParents = parents.filter(
+    (parent) => parent.id !== father?.id && parent.id !== mother?.id,
+  );
+
+  if (father && mother) {
+    return `${person.full_name}, con ông ${father.full_name} và bà ${mother.full_name}`;
+  }
+
+  if (father) return `${person.full_name}, con ông ${father.full_name}`;
+  if (mother) return `${person.full_name}, con bà ${mother.full_name}`;
+
+  if (otherParents.length > 0) {
+    return `${person.full_name}, con của ${otherParents
+      .map((parent) => parent.full_name)
+      .join(" và ")}`;
+  }
+
+  return person.full_name;
+}
+
+async function getPersonBriefs(
+  supabase: SupabaseClientLike,
+  personIds: string[],
+) {
+  const ids = Array.from(new Set(personIds.filter(Boolean)));
+  if (ids.length === 0) return new Map<string, PersonBrief>();
+
+  const { data, error } = await supabase
+    .from("persons")
+    .select("id, full_name, gender")
+    .in("id", ids);
+
+  if (error) throw new Error(error.message);
+
+  return new Map(
+    ((data ?? []) as PersonBrief[]).map((person) => [person.id, person]),
+  );
+}
+
+async function getParentsForPerson(
+  supabase: SupabaseClientLike,
+  personId: string,
+) {
+  const { data: childRows, error: childError } = await supabase
+    .from("family_children")
+    .select("family_id")
+    .eq("person_id", personId);
+
+  if (childError) throw new Error(childError.message);
+
+  const familyIds = Array.from(
+    new Set((childRows ?? []).map((row) => row.family_id).filter(Boolean)),
+  );
+
+  if (familyIds.length === 0) return [] as PersonBrief[];
+
+  const { data: parentRows, error: parentError } = await supabase
+    .from("family_parents")
+    .select("person_id")
+    .in("family_id", familyIds);
+
+  if (parentError) throw new Error(parentError.message);
+
+  const parentIds = Array.from(
+    new Set((parentRows ?? []).map((row) => row.person_id).filter(Boolean)),
+  );
+
+  const parentMap = await getPersonBriefs(supabase, parentIds);
+  return parentIds
+    .map((parentId) => parentMap.get(parentId))
+    .filter(Boolean) as PersonBrief[];
+}
+
+async function buildWeddingAnnouncement(input: {
+  supabase: SupabaseClientLike;
+  brideId: string | null;
+  groomId: string | null;
+}) {
+  const personMap = await getPersonBriefs(
+    input.supabase,
+    [input.brideId, input.groomId].filter(Boolean) as string[],
+  );
+
+  const bride = input.brideId ? personMap.get(input.brideId) ?? null : null;
+  const groom = input.groomId ? personMap.get(input.groomId) ?? null : null;
+
+  const brideParents = input.brideId
+    ? await getParentsForPerson(input.supabase, input.brideId)
+    : [];
+  const groomParents = input.groomId
+    ? await getParentsForPerson(input.supabase, input.groomId)
+    : [];
+
+  const lines = [
+    bride ? `Cô dâu: ${formatParentLine(bride, brideParents)}.` : null,
+    groom ? `Chú rể: ${formatParentLine(groom, groomParents)}.` : null,
+  ].filter(Boolean);
+
+  return lines.length > 0 ? lines.join("\n") : null;
+}
+
+async function findFamilyIdForCouple(
+  supabase: SupabaseClientLike,
+  personAId: string,
+  personBId: string,
+) {
+  const { data: parentRows, error } = await supabase
+    .from("family_parents")
+    .select("family_id, person_id");
+
+  if (error) throw new Error(error.message);
+
+  const byFamily = new Map<string, Set<string>>();
+
+  for (const row of parentRows ?? []) {
+    if (!row.family_id || !row.person_id) continue;
+    if (!byFamily.has(row.family_id)) byFamily.set(row.family_id, new Set());
+    byFamily.get(row.family_id)?.add(row.person_id);
+  }
+
+  for (const [familyId, parentIds] of byFamily.entries()) {
+    if (parentIds.has(personAId) && parentIds.has(personBId)) {
+      return familyId;
+    }
+  }
+
+  return null;
 }
 
 async function assertCanCreateAdminEvent(rootPersonId: string | null) {
@@ -389,15 +533,12 @@ export async function createAdminEvent(formData: FormData) {
   const rootPersonId = cleanText(formData.get("root_person_id"));
   const brideId = cleanText(formData.get("bride_id"));
   const groomId = cleanText(formData.get("groom_id"));
-  const relatedPersonIds = normalizeRelatedPersonIds(
-    formData.getAll("related_person_ids"),
-  );
 
   const permission = await assertCanCreateAdminEvent(rootPersonId);
   if (!permission.ok) return { error: permission.error };
 
   if (type === "wedding" && !brideId && !groomId) {
-    return { error: "Sự kiện đám cưới nên chọn ít nhất cô dâu hoặc chú rể." };
+    return { error: "Sự kiện đám cưới cần chọn cô dâu hoặc chú rể." };
   }
 
   try {
@@ -406,6 +547,10 @@ export async function createAdminEvent(formData: FormData) {
     const timeText = cleanText(formData.get("time_text"));
     const invitationText = cleanText(formData.get("invitation_text"));
     const manualDescription = cleanText(formData.get("description"));
+    const weddingAnnouncement =
+      type === "wedding"
+        ? await buildWeddingAnnouncement({ supabase, brideId, groomId })
+        : null;
 
     const title =
       basePayload.title ||
@@ -418,11 +563,17 @@ export async function createAdminEvent(formData: FormData) {
       description:
         type === "wedding"
           ? buildWeddingDescription({
+              announcementText: weddingAnnouncement,
               timeText,
               invitationText,
               description: manualDescription,
             })
-          : manualDescription,
+          : buildWeddingDescription({
+              announcementText: null,
+              timeText,
+              invitationText: null,
+              description: manualDescription,
+            }),
       legacy_source:
         type === "wedding" ? "manual.admin_wedding" : "manual.admin_event",
       migration_confidence: "manual",
@@ -445,10 +596,6 @@ export async function createAdminEvent(formData: FormData) {
     if (rootPersonId) links.set(rootPersonId, "visibility_root");
     if (brideId) links.set(brideId, "bride");
     if (groomId) links.set(groomId, "groom");
-
-    for (const personId of relatedPersonIds) {
-      if (!links.has(personId)) links.set(personId, "related");
-    }
 
     if (links.size > 0) {
       const { error: linkError } = await supabase.from("person_events").insert(
@@ -479,7 +626,6 @@ export async function createAdminEvent(formData: FormData) {
         rootPersonId,
         brideId,
         groomId,
-        relatedPersonIds,
         timeText,
         placeText: eventPayload.place_text,
         source: "admin_event_form",
@@ -633,12 +779,91 @@ export async function createPersonEvent(formData: FormData) {
   const personId = cleanText(formData.get("person_id"));
   if (!personId) return { error: "Thiếu person_id." };
 
-  const permission = await assertCanManagePersonEvent(personId, "event.create");
-  if (!permission.ok) return { error: permission.error };
-
   try {
     const supabase = await getSupabase();
     const eventPayload = buildEventPayload(formData);
+    const spousePersonId = cleanText(formData.get("spouse_person_id"));
+
+    if (eventPayload.type === "marriage") {
+      if (!spousePersonId) {
+        return { error: "Sự kiện kết hôn cần chọn người kết hôn với." };
+      }
+
+      const permission = await assertCanManageFamilyEvent(
+        personId,
+        spousePersonId,
+        "event.marriage.create",
+      );
+
+      if (!permission.ok) return { error: permission.error };
+
+      const familyId = await findFamilyIdForCouple(
+        supabase,
+        personId,
+        spousePersonId,
+      );
+
+      const marriagePayload = {
+        ...eventPayload,
+        type: "marriage",
+        family_id: familyId,
+        legacy_source: "manual.marriage_event",
+      };
+
+      const { data: eventRow, error: eventError } = await supabase
+        .from("events")
+        .insert(marriagePayload)
+        .select("id")
+        .single();
+
+      if (eventError || !eventRow) {
+        return { error: eventError?.message ?? "Không tạo được sự kiện kết hôn." };
+      }
+
+      const links = Array.from(new Set([personId, spousePersonId])).map(
+        (linkedPersonId) => ({
+          person_id: linkedPersonId,
+          event_id: eventRow.id,
+          role: "principal",
+        }),
+      );
+
+      const { error: linkError } = await supabase
+        .from("person_events")
+        .insert(links);
+
+      if (linkError) {
+        await supabase
+          .from("events")
+          .update({ deleted_at: new Date().toISOString() })
+          .eq("id", eventRow.id);
+
+        return { error: linkError.message };
+      }
+
+      await recordAuditLog({
+        action: "event.created",
+        entityType: "event",
+        entityId: eventRow.id,
+        entityLabel: marriagePayload.title ?? "Kết hôn",
+        metadata: {
+          personId,
+          spousePersonId,
+          familyId,
+          type: "marriage",
+          source: "person_event_form",
+        },
+      });
+
+      revalidatePath(`/dashboard/members/${personId}`);
+      revalidatePath(`/dashboard/members/${spousePersonId}`);
+      revalidatePath("/dashboard/events");
+
+      return { success: true, eventId: eventRow.id };
+    }
+
+    const permission = await assertCanManagePersonEvent(personId, "event.create");
+    if (!permission.ok) return { error: permission.error };
 
     const { data: eventRow, error: eventError } = await supabase
       .from("events")

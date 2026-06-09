@@ -3,12 +3,12 @@
 import { createAdminEvent } from "@/app/actions/events";
 import PersonSelector from "@/components/PersonSelector";
 import type { Person } from "@/types";
-import { CalendarPlus, Loader2, MapPin, Users2 } from "lucide-react";
-import { useMemo, useState, useTransition } from "react";
+import { CalendarPlus, Loader2, MapPin, Users2, X } from "lucide-react";
+import { useState, useTransition } from "react";
 
 const EVENT_TYPES = [
-  { value: "wedding", label: "Đám cưới / Thiệp cưới" },
   { value: "custom", label: "Sự kiện chung" },
+  { value: "wedding", label: "Đám cưới / Thiệp cưới" },
 ];
 
 const PRECISIONS = [
@@ -24,23 +24,14 @@ type AdminEventFormProps = {
 
 export default function AdminEventForm({ persons }: AdminEventFormProps) {
   const [isOpen, setIsOpen] = useState(false);
-  const [eventType, setEventType] = useState("wedding");
+  const [eventType, setEventType] = useState("custom");
   const [precision, setPrecision] = useState("day");
   const [rootPersonId, setRootPersonId] = useState<string | null>(null);
   const [brideId, setBrideId] = useState<string | null>(null);
   const [groomId, setGroomId] = useState<string | null>(null);
-  const [relatedPersonId, setRelatedPersonId] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
-
-  const selectedPersonIds = useMemo(
-    () =>
-      [rootPersonId, brideId, groomId, relatedPersonId]
-        .filter(Boolean)
-        .join(","),
-    [rootPersonId, brideId, groomId, relatedPersonId],
-  );
 
   const handleSubmit = (formData: FormData) => {
     setError(null);
@@ -48,10 +39,10 @@ export default function AdminEventForm({ persons }: AdminEventFormProps) {
 
     formData.set("type", eventType);
     formData.set("date_precision", precision);
+
     if (rootPersonId) formData.set("root_person_id", rootPersonId);
     if (brideId) formData.set("bride_id", brideId);
     if (groomId) formData.set("groom_id", groomId);
-    if (relatedPersonId) formData.set("related_person_ids", relatedPersonId);
 
     startTransition(() => {
       void (async () => {
@@ -62,25 +53,20 @@ export default function AdminEventForm({ persons }: AdminEventFormProps) {
           return;
         }
 
-        setMessage("Đã tạo sự kiện.");
+        setMessage("Đã thêm sự kiện.");
         setIsOpen(false);
       })();
     });
   };
 
   return (
-    <section className="rounded-3xl border border-amber-200/70 bg-gradient-to-br from-amber-50 via-white to-stone-50 p-5 shadow-sm">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-start gap-3">
-          <div className="rounded-2xl border border-amber-100 bg-white p-3 text-amber-700 shadow-sm">
-            <CalendarPlus className="size-5" />
-          </div>
-          <div>
-            <h2 className="text-lg font-bold text-stone-900">Tạo sự kiện</h2>
-            <p className="mt-1 text-sm leading-6 text-stone-600">
-              Admin/Editor có thể tạo sự kiện chung, thiệp cưới hoặc đám cưới sắp tới và chọn nhánh được phép xem bằng gốc hiển thị.
-            </p>
-          </div>
+    <div className="w-full">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h2 className="text-lg font-bold text-stone-800">Danh sách sự kiện</h2>
+          <p className="text-sm text-stone-500">
+            Sinh nhật, ngày giỗ, kỷ niệm ngày cưới, đám cưới và sự kiện gia đình. Mỗi sự kiện đã có thời gian đếm ngược ngay trên thẻ sự kiện.
+          </p>
         </div>
 
         <button
@@ -90,10 +76,11 @@ export default function AdminEventForm({ persons }: AdminEventFormProps) {
             setMessage(null);
             setIsOpen((value) => !value);
           }}
-          className="inline-flex items-center justify-center gap-2 rounded-xl bg-amber-700 px-4 py-2.5 text-sm font-bold text-white shadow-sm transition hover:bg-amber-800"
+          className="inline-flex w-fit items-center justify-center gap-2 rounded-xl bg-amber-700 px-4 py-2.5 text-sm font-bold text-white shadow-sm transition hover:bg-amber-800 disabled:opacity-60"
+          disabled={isPending}
         >
-          <CalendarPlus className="size-4" />
-          {isOpen ? "Đóng form" : "Tạo sự kiện"}
+          {isOpen ? <X className="size-4" /> : <CalendarPlus className="size-4" />}
+          {isOpen ? "Đóng" : "Thêm sự kiện"}
         </button>
       </div>
 
@@ -110,8 +97,10 @@ export default function AdminEventForm({ persons }: AdminEventFormProps) {
       ) : null}
 
       {isOpen ? (
-        <form action={handleSubmit} className="mt-5 rounded-2xl border border-stone-200 bg-white p-4 shadow-sm">
-          <input type="hidden" name="selected_person_ids" value={selectedPersonIds} readOnly />
+        <form action={handleSubmit} className="mt-5 rounded-2xl border border-amber-200/70 bg-amber-50/40 p-4 shadow-sm ring-1 ring-amber-50">
+          <div className="mb-4 rounded-xl border border-amber-200 bg-white px-4 py-3 text-xs leading-5 text-amber-800">
+            <strong>Quyền hiển thị:</strong> chọn <strong>Gốc hiển thị</strong> để member thuộc nhánh đó nhìn thấy sự kiện theo cơ chế phân quyền hiện có. Nếu để trống, sự kiện chỉ hiển thị cho Admin/Editor.
+          </div>
 
           <div className="grid gap-4 md:grid-cols-2">
             <label className="space-y-1.5">
@@ -132,9 +121,9 @@ export default function AdminEventForm({ persons }: AdminEventFormProps) {
               <span className="text-xs font-bold uppercase tracking-wide text-stone-500">Tiêu đề</span>
               <input
                 name="title"
-                defaultValue={eventType === "wedding" ? "Đám cưới / Thiệp cưới" : "Sự kiện gia đình"}
+                defaultValue="Sự kiện gia đình"
                 className="w-full rounded-xl border border-stone-200 px-3 py-2.5 text-sm outline-none transition focus:border-amber-400 focus:ring-2 focus:ring-amber-100"
-                placeholder="Ví dụ: Thiệp cưới Nguyễn Văn A và Trần Thị B"
+                placeholder={eventType === "wedding" ? "Ví dụ: Thiệp cưới Nguyễn Văn A và Trần Thị B" : "Ví dụ: Họp mặt gia đình"}
               />
             </label>
 
@@ -158,6 +147,7 @@ export default function AdminEventForm({ persons }: AdminEventFormProps) {
                 name="date_text"
                 className="w-full rounded-xl border border-stone-200 px-3 py-2.5 text-sm outline-none transition focus:border-amber-400 focus:ring-2 focus:ring-amber-100"
                 placeholder={PRECISIONS.find((item) => item.value === precision)?.placeholder ?? "dd-mm-yyyy"}
+                disabled={precision === "unknown"}
               />
             </label>
 
@@ -194,12 +184,12 @@ export default function AdminEventForm({ persons }: AdminEventFormProps) {
               showAllOption
               allOptionLabel="Chỉ admin/editor"
             />
-            <div className="rounded-2xl border border-stone-200 bg-stone-50/70 p-3 text-xs leading-5 text-stone-600">
+            <div className="rounded-2xl border border-stone-200 bg-white/80 p-3 text-xs leading-5 text-stone-600">
               <div className="mb-1 flex items-center gap-2 font-bold text-stone-700">
                 <Users2 className="size-4" />
-                Quyền hiển thị
+                Phạm vi xem
               </div>
-              Chọn gốc hiển thị để member thuộc nhánh được phép thấy sự kiện. Nếu để “Chỉ admin/editor”, sự kiện không mở rộng thêm cho member ngoài quyền hiện có.
+              Root được chọn sẽ được gắn vào sự kiện với vai trò <strong>visibility_root</strong>. Member chỉ thấy nếu root đó nằm trong vùng họ được phép xem.
             </div>
 
             {eventType === "wedding" ? (
@@ -222,22 +212,11 @@ export default function AdminEventForm({ persons }: AdminEventFormProps) {
                 />
               </>
             ) : null}
-
-            <PersonSelector
-              persons={persons}
-              selectedId={relatedPersonId}
-              onSelect={setRelatedPersonId}
-              label="Người liên quan thêm"
-              placeholder="Chọn người liên quan"
-              className="w-full"
-              showAllOption
-              allOptionLabel="Không chọn thêm"
-            />
           </div>
 
           <div className="mt-5 grid gap-4 md:grid-cols-2">
             <label className="space-y-1.5">
-              <span className="text-xs font-bold uppercase tracking-wide text-stone-500">Nội dung thiệp cưới</span>
+              <span className="text-xs font-bold uppercase tracking-wide text-stone-500">Nội dung thiệp / thông báo</span>
               <textarea
                 name="invitation_text"
                 rows={5}
@@ -277,6 +256,6 @@ export default function AdminEventForm({ persons }: AdminEventFormProps) {
           </div>
         </form>
       ) : null}
-    </section>
+    </div>
   );
 }

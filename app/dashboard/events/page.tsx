@@ -96,6 +96,7 @@ type PermissionEvent = {
 type PermissionPersonEvent = {
   person_id: string;
   event_id: string;
+  role?: string | null;
   [key: string]: unknown;
 };
 
@@ -115,7 +116,6 @@ function PermissionEmptyState({
     </div>
   );
 }
-
 
 function isAdminManagedEvent(event: PermissionEvent) {
   const legacySource = String(event.legacy_source ?? "");
@@ -161,6 +161,7 @@ function getEventPersonNames(input: {
 }) {
   return input.personEvents
     .filter((row) => row.event_id === input.eventId)
+    .filter((row) => row.role !== "visibility_root")
     .map((row) => input.personById.get(row.person_id))
     .filter(Boolean) as string[];
 }
@@ -315,7 +316,7 @@ export default async function EventsPage() {
         <div className="w-full relative z-20 py-6 px-4 sm:px-6 lg:px-8 max-w-4xl mx-auto">
           <h1 className="title">Sự kiện gia phả</h1>
           <p className="text-stone-500 mt-1 text-sm">
-            Sinh nhật, ngày giỗ, kỷ niệm ngày cưới và các sự kiện gia đình
+            Sinh nhật, ngày giỗ, kỷ niệm ngày cưới, đám cưới và các sự kiện gia đình
           </p>
           {permission.isRestricted ? (
             <p className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-2 text-xs leading-5 text-amber-800">
@@ -327,18 +328,22 @@ export default async function EventsPage() {
         </div>
 
         <main className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 w-full flex-1 space-y-8">
-          {canCreateAdminEvent ? <AdminEventForm persons={selectorPersons} /> : null}
+          <section className="rounded-3xl border border-stone-200 bg-white/90 p-5 shadow-sm">
+            <div className="mb-4">
+              {canCreateAdminEvent ? (
+                <AdminEventForm persons={selectorPersons} />
+              ) : (
+                <div>
+                  <h2 className="text-lg font-bold text-stone-800">Danh sách sự kiện</h2>
+                  <p className="text-sm text-stone-500">
+                    Sinh nhật, ngày giỗ, kỷ niệm ngày cưới và sự kiện gia đình. Mỗi sự kiện đã có thời gian đếm ngược ngay trên thẻ sự kiện.
+                  </p>
+                </div>
+              )}
+            </div>
 
-          {adminManagedEvents.length > 0 ? (
-            <section className="rounded-3xl border border-amber-200/70 bg-white/90 p-5 shadow-sm">
-              <div className="mb-4">
-                <h2 className="text-lg font-bold text-stone-800">Sự kiện do admin tạo</h2>
-                <p className="text-sm text-stone-500">
-                  Đám cưới, thiệp cưới và sự kiện chung có thể được gắn với người liên quan hoặc gốc hiển thị theo nhánh.
-                </p>
-              </div>
-
-              <div className="space-y-3">
+            {adminManagedEvents.length > 0 ? (
+              <div className="mb-6 space-y-3">
                 {adminManagedEvents.map((event) => {
                   const names = getEventPersonNames({
                     eventId: event.id,
@@ -393,16 +398,8 @@ export default async function EventsPage() {
                   );
                 })}
               </div>
-            </section>
-          ) : null}
+            ) : null}
 
-          <section className="rounded-3xl border border-stone-200 bg-white/90 p-5 shadow-sm">
-            <div className="mb-4">
-              <h2 className="text-lg font-bold text-stone-800">Danh sách sự kiện</h2>
-              <p className="text-sm text-stone-500">
-                Sinh nhật, ngày giỗ, kỷ niệm ngày cưới và sự kiện gia đình. Mỗi sự kiện đã có thời gian đếm ngược ngay trên thẻ sự kiện.
-              </p>
-            </div>
             <EventsList persons={persons} customEvents={customEvents} />
           </section>
         </main>

@@ -5,7 +5,9 @@ import {
   softDeletePersonEvent,
   updatePersonEvent,
 } from "@/app/actions/events";
+import PersonSelector from "@/components/PersonSelector";
 import { PersonTimeline, type TimelineEvent } from "@/components/PersonTimeline";
+import type { Person } from "@/types";
 import { createClient } from "@/utils/supabase/client";
 import { CalendarDays, Edit3, Plus, Trash2, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
@@ -31,7 +33,6 @@ const EVENT_TYPES = [
   { value: "birth", label: "Sinh" },
   { value: "death", label: "Mất" },
   { value: "marriage", label: "Kết hôn" },
-  { value: "wedding", label: "Đám cưới / Thiệp cưới" },
   { value: "divorce", label: "Ly hôn" },
   { value: "burial", label: "An táng" },
   { value: "residence", label: "Cư trú" },
@@ -48,17 +49,63 @@ const PRECISIONS = [
   { value: "unknown", label: "Không rõ ngày", placeholder: "Để trống" },
 ];
 
+function toPersonSelectorRows(rows: Partial<Person>[]) {
+  return rows.map((person) => ({
+    id: person.id ?? "",
+    full_name: person.full_name ?? "Không rõ tên",
+    gender: person.gender === "female" || person.gender === "male" ? person.gender : "other",
+    birth_year: person.birth_year ?? null,
+    birth_month: person.birth_month ?? null,
+    birth_day: person.birth_day ?? null,
+    death_year: person.death_year ?? null,
+    death_month: person.death_month ?? null,
+    death_day: person.death_day ?? null,
+    avatar_url: person.avatar_url ?? null,
+    note: person.note ?? null,
+    created_at: person.created_at ?? "",
+    updated_at: person.updated_at ?? "",
+    death_lunar_year: person.death_lunar_year ?? null,
+    death_lunar_month: person.death_lunar_month ?? null,
+    death_lunar_day: person.death_lunar_day ?? null,
+    is_deceased: person.is_deceased ?? false,
+    is_in_law: person.is_in_law ?? false,
+    birth_order: person.birth_order ?? null,
+    generation: person.generation ?? null,
+    other_names: person.other_names ?? null,
+  })) as Person[];
+}
+
 export default function PersonEventsPanel({
   personId,
   canEdit = false,
   className,
 }: PersonEventsPanelProps) {
   const [events, setEvents] = useState<EditableTimelineEvent[]>([]);
+  const [persons, setPersons] = useState<Person[]>([]);
   const [loading, setLoading] = useState(false);
   const [editing, setEditing] = useState<EditingState | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+
+  const loadPersons = useCallback(async () => {
+    if (!canEdit) return;
+
+    const supabase = createClient();
+    const { data, error } = await supabase
+      .from("persons_active")
+      .select(
+        "id, full_name, gender, birth_year, birth_month, birth_day, death_year, death_month, death_day, death_lunar_year, death_lunar_month, death_lunar_day, is_deceased, is_in_law, birth_order, generation, other_names, avatar_url, note, created_at, updated_at",
+      )
+      .order("full_name", { ascending: true });
+
+    if (error) {
+      setError(error.message);
+      return;
+    }
+
+    setPersons(toPersonSelectorRows(data ?? []));
+  }, [canEdit]);
 
   const loadEvents = useCallback(async () => {
     if (!personId) return;
@@ -109,7 +156,8 @@ export default function PersonEventsPanel({
 
   useEffect(() => {
     loadEvents();
-  }, [loadEvents]);
+    loadPersons();
+  }, [loadEvents, loadPersons]);
 
   const sortedEvents = useMemo(
     () =>
@@ -221,6 +269,7 @@ export default function PersonEventsPanel({
           key={editing.mode === "edit" ? editing.event.id : "create"}
           editing={editing}
           disabled={isPending}
+          persons={persons.filter((person) => person.id !== personId)}
           onCancel={() => setEditing(null)}
           onSubmit={handleSubmit}
         />
@@ -272,17 +321,22 @@ export default function PersonEventsPanel({
 function EventForm({
   editing,
   disabled,
+  persons,
   onCancel,
   onSubmit,
 }: {
   editing: EditingState;
   disabled: boolean;
+  persons: Person[];
   onCancel: () => void;
   onSubmit: (formData: FormData) => void;
 }) {
   const event = editing.mode === "edit" ? editing.event : null;
   const [precision, setPrecision] = useState(event?.date_precision || "day");
+  const [eventType, setEventType] = useState(event?.type || "custom");
+  const [spousePersonId, setSpousePersonId] = useState<string | null>(null);
   const precisionInfo = PRECISIONS.find((item) => item.value === precision) ?? PRECISIONS[0];
+  const showSpouseSelector = editing.mode === "create" && eventType === "marriage";
 
   return (
     <form
@@ -290,6 +344,9 @@ function EventForm({
       className="mb-5 rounded-2xl border border-amber-200/70 bg-white p-4 shadow-sm ring-1 ring-amber-50"
     >
       {event ? <input type="hidden" name="event_id" value={event.id} /> : null}
+      {showSpouseSelector && spousePersonId ? (
+        <input type="hidden" name="spouse_person_id" value={spousePersonId} />
+      ) : null}
 
       <div className="mb-4 flex items-center justify-between gap-3">
         <div className="flex items-center gap-2">
@@ -319,7 +376,8 @@ function EventForm({
           Loại sự kiện
           <select
             name="type"
-            defaultValue={event?.type || "custom"}
+            value={eventType}
+            onChange={(event) => setEventType(event.target.value)}
             className="mt-1 w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-stone-900 shadow-sm focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
           >
             {EVENT_TYPES.map((item) => (
@@ -345,6 +403,22 @@ function EventForm({
             ))}
           </select>
         </label>
+
+        {showSpouseSelector ? (
+          <div className="sm:col-span-2">
+            <PersonSelector
+              persons={persons}
+              selectedId={spousePersonId}
+              onSelect={setSpousePersonId}
+              label="Kết hôn với"
+              placeholder="Chọn vợ/chồng"
+              className="w-full"
+            />
+            <p className="mt-2 text-xs leading-5 text-stone-500">
+              Khi lưu, sự kiện kết hôn sẽ được ghi vào timeline của cả hai người. Nếu hai người đã có family trong Family Model, event sẽ tự gắn với family đó.
+            </p>
+          </div>
+        ) : null}
 
         <label className="block text-sm font-medium text-stone-700 sm:col-span-2">
           Tiêu đề
@@ -466,13 +540,6 @@ function getEventTypeLabel(type: string) {
 
 function getEventDateInputValue(event: EditableTimelineEvent | null) {
   if (!event?.start_date) return "";
-  if (event.date_precision === "year") return event.start_date.slice(0, 4);
-  if (event.date_precision === "month") return formatIsoMonthForInput(event.start_date);
-  return formatIsoDateForInput(event.start_date);
-}
-
-function formatEventDateSummary(event: EditableTimelineEvent) {
-  if (!event.start_date) return "Chưa rõ ngày";
   if (event.date_precision === "year") return event.start_date.slice(0, 4);
   if (event.date_precision === "month") return formatIsoMonthForInput(event.start_date);
   return formatIsoDateForInput(event.start_date);

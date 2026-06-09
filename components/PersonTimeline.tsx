@@ -149,6 +149,7 @@ export function getEventTypeLabel(type: string) {
     birth: "Sinh",
     death: "Mất",
     marriage: "Kết hôn",
+    wedding: "Đám cưới",
     divorce: "Ly hôn",
     burial: "An táng",
     residence: "Cư trú",
@@ -213,6 +214,11 @@ function getEventTypeStyle(type: string) {
       iconWrap: "border-rose-100 bg-rose-50 text-rose-600",
       icon: "text-rose-600",
       badge: "bg-rose-50 text-rose-700",
+    },
+    wedding: {
+      iconWrap: "border-pink-100 bg-pink-50 text-pink-600",
+      icon: "text-pink-600",
+      badge: "bg-pink-50 text-pink-700",
     },
     divorce: {
       iconWrap: "border-orange-100 bg-orange-50 text-orange-600",

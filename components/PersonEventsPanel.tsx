@@ -31,6 +31,7 @@ const EVENT_TYPES = [
   { value: "birth", label: "Sinh" },
   { value: "death", label: "Mất" },
   { value: "marriage", label: "Kết hôn" },
+  { value: "wedding", label: "Đám cưới / Thiệp cưới" },
   { value: "divorce", label: "Ly hôn" },
   { value: "burial", label: "An táng" },
   { value: "residence", label: "Cư trú" },

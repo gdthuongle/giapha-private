@@ -1,4 +1,7 @@
 import EventsList from "@/components/EventsList";
+import AdminEventForm from "@/components/events/AdminEventForm";
+import { CalendarDays, MapPin, Users2 } from "lucide-react";
+import type { Person } from "@/types";
 import MemberDetailModal from "@/components/modal/MemberDetailModal";
 import { MemberListProvider } from "@/context/MemberListContext";
 import {
@@ -25,6 +28,14 @@ type EventPerson = {
   death_lunar_day: number | null;
   is_deceased: boolean;
   avatar_url?: string | null;
+  gender?: string | null;
+  note?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+  is_in_law?: boolean | null;
+  birth_order?: number | null;
+  generation?: number | null;
+  other_names?: string | null;
 };
 
 type CustomEvent = {
@@ -66,6 +77,9 @@ type PermissionEvent = {
   id: string;
   type?: string | null;
   title?: string | null;
+  description?: string | null;
+  place_text?: string | null;
+  legacy_source?: string | null;
   start_date?: string | null;
   end_date?: string | null;
   sort_date?: string | null;
@@ -102,6 +116,81 @@ function PermissionEmptyState({
   );
 }
 
+
+function isAdminManagedEvent(event: PermissionEvent) {
+  const legacySource = String(event.legacy_source ?? "");
+  return event.type === "wedding" || legacySource.startsWith("manual.admin_");
+}
+
+function formatEventDate(event: PermissionEvent) {
+  const value = event.start_date || event.sort_date;
+  if (!value) return "Chưa rõ ngày";
+
+  if (event.date_precision === "year") return value.slice(0, 4);
+
+  if (event.date_precision === "month") {
+    const match = value.match(/^(\d{4})-(\d{2})/);
+    return match ? `${match[2]}-${match[1]}` : value;
+  }
+
+  const match = value.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  return match ? `${match[3]}-${match[2]}-${match[1]}` : value;
+}
+
+function getEventTypeLabel(type?: string | null) {
+  const labels: Record<string, string> = {
+    wedding: "Đám cưới",
+    custom: "Sự kiện chung",
+    birth: "Sinh",
+    death: "Mất",
+    marriage: "Kết hôn",
+    divorce: "Ly hôn",
+  };
+
+  return labels[type ?? ""] ?? type ?? "Sự kiện";
+}
+
+function buildPersonLookup(persons: EventPerson[]) {
+  return new Map(persons.map((person) => [person.id, person.full_name]));
+}
+
+function getEventPersonNames(input: {
+  eventId: string;
+  personEvents: PermissionPersonEvent[];
+  personById: Map<string, string>;
+}) {
+  return input.personEvents
+    .filter((row) => row.event_id === input.eventId)
+    .map((row) => input.personById.get(row.person_id))
+    .filter(Boolean) as string[];
+}
+
+function toPersonSelectorRows(persons: EventPerson[]) {
+  return persons.map((person) => ({
+    id: person.id,
+    full_name: person.full_name,
+    gender: person.gender === "female" || person.gender === "male" ? person.gender : "other",
+    birth_year: person.birth_year ?? null,
+    birth_month: person.birth_month ?? null,
+    birth_day: person.birth_day ?? null,
+    death_year: person.death_year ?? null,
+    death_month: person.death_month ?? null,
+    death_day: person.death_day ?? null,
+    avatar_url: person.avatar_url ?? null,
+    note: person.note ?? null,
+    created_at: person.created_at ?? "",
+    updated_at: person.updated_at ?? "",
+    death_lunar_year: person.death_lunar_year ?? null,
+    death_lunar_month: person.death_lunar_month ?? null,
+    death_lunar_day: person.death_lunar_day ?? null,
+    is_deceased: person.is_deceased ?? false,
+    is_in_law: person.is_in_law ?? false,
+    birth_order: person.birth_order ?? null,
+    generation: person.generation ?? null,
+    other_names: person.other_names ?? null,
+  })) as Person[];
+}
+
 export default async function EventsPage() {
   const supabase = await getSupabase();
   const profile = await getProfile();
@@ -119,7 +208,7 @@ export default async function EventsPage() {
     supabase
       .from("persons_active")
       .select(
-        "id, full_name, birth_year, birth_month, birth_day, death_year, death_month, death_day, death_lunar_year, death_lunar_month, death_lunar_day, is_deceased, avatar_url",
+        "id, full_name, gender, birth_year, birth_month, birth_day, death_year, death_month, death_day, death_lunar_year, death_lunar_month, death_lunar_day, is_deceased, is_in_law, birth_order, generation, other_names, avatar_url, note, created_at, updated_at",
       ),
     supabase
       .from("custom_events")
@@ -209,6 +298,16 @@ export default async function EventsPage() {
     : allPersons;
 
   const customEvents = permission.isRestricted ? [] : allCustomEvents;
+  const canCreateAdminEvent = profile?.role === "admin" || profile?.role === "editor";
+  const personById = buildPersonLookup(allPersons);
+  const adminManagedEvents = eventFilter.events
+    .filter(isAdminManagedEvent)
+    .sort((a, b) =>
+      String(a.sort_date || a.start_date || "9999-99-99").localeCompare(
+        String(b.sort_date || b.start_date || "9999-99-99"),
+      ),
+    );
+  const selectorPersons = toPersonSelectorRows(persons);
 
   return (
     <MemberListProvider>
@@ -228,6 +327,75 @@ export default async function EventsPage() {
         </div>
 
         <main className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 w-full flex-1 space-y-8">
+          {canCreateAdminEvent ? <AdminEventForm persons={selectorPersons} /> : null}
+
+          {adminManagedEvents.length > 0 ? (
+            <section className="rounded-3xl border border-amber-200/70 bg-white/90 p-5 shadow-sm">
+              <div className="mb-4">
+                <h2 className="text-lg font-bold text-stone-800">Sự kiện do admin tạo</h2>
+                <p className="text-sm text-stone-500">
+                  Đám cưới, thiệp cưới và sự kiện chung có thể được gắn với người liên quan hoặc gốc hiển thị theo nhánh.
+                </p>
+              </div>
+
+              <div className="space-y-3">
+                {adminManagedEvents.map((event) => {
+                  const names = getEventPersonNames({
+                    eventId: event.id,
+                    personEvents: eventFilter.personEvents,
+                    personById,
+                  });
+
+                  return (
+                    <article
+                      key={event.id}
+                      className="rounded-2xl border border-stone-200 bg-gradient-to-br from-white to-amber-50/40 p-4 shadow-sm"
+                    >
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                        <div className="min-w-0">
+                          <div className="mb-2 flex flex-wrap items-center gap-2">
+                            <span className="rounded-full bg-amber-100 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-amber-800">
+                              {getEventTypeLabel(event.type)}
+                            </span>
+                            <span className="inline-flex items-center gap-1 text-xs font-semibold text-stone-500">
+                              <CalendarDays className="size-3.5" />
+                              {formatEventDate(event)}
+                            </span>
+                          </div>
+
+                          <h3 className="text-base font-bold text-stone-900">
+                            {event.title || getEventTypeLabel(event.type)}
+                          </h3>
+
+                          <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs font-medium text-stone-500">
+                            {event.place_text ? (
+                              <span className="inline-flex items-center gap-1">
+                                <MapPin className="size-3.5" />
+                                {event.place_text}
+                              </span>
+                            ) : null}
+                            {names.length > 0 ? (
+                              <span className="inline-flex items-center gap-1">
+                                <Users2 className="size-3.5" />
+                                {names.join(", ")}
+                              </span>
+                            ) : null}
+                          </div>
+                        </div>
+                      </div>
+
+                      {event.description ? (
+                        <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-stone-600">
+                          {String(event.description)}
+                        </p>
+                      ) : null}
+                    </article>
+                  );
+                })}
+              </div>
+            </section>
+          ) : null}
+
           <section className="rounded-3xl border border-stone-200 bg-white/90 p-5 shadow-sm">
             <div className="mb-4">
               <h2 className="text-lg font-bold text-stone-800">Danh sách sự kiện</h2>

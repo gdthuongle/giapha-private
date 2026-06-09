@@ -22,6 +22,7 @@ const ALLOWED_EVENT_TYPES = new Set([
   "award",
   "retirement",
   "custom",
+  "wedding",
 ]);
 
 const ALLOWED_DATE_PRECISIONS = new Set([
@@ -312,6 +313,193 @@ async function assertCanManageFamilyEvent(
   if (!second.ok) return second;
 
   return { ok: true as const };
+}
+
+
+
+function normalizeRelatedPersonIds(values: FormDataEntryValue[]) {
+  return Array.from(
+    new Set(
+      values
+        .flatMap((value) => value.toString().split(","))
+        .map((value) => value.trim())
+        .filter(Boolean),
+    ),
+  );
+}
+
+function buildWeddingDescription(input: {
+  timeText: string | null;
+  invitationText: string | null;
+  description: string | null;
+}) {
+  const parts: string[] = [];
+
+  if (input.timeText) parts.push(`Thời gian: ${input.timeText}`);
+  if (input.invitationText) parts.push(`Nội dung thiệp cưới:\n${input.invitationText}`);
+  if (input.description) parts.push(input.description);
+
+  return parts.join("\n\n") || null;
+}
+
+async function assertCanCreateAdminEvent(rootPersonId: string | null) {
+  const profile = await getProfile();
+
+  if (profile?.role !== "admin" && profile?.role !== "editor") {
+    await recordAuditLog({
+      action: "permission.denied",
+      entityType: "event",
+      severity: "warning",
+      metadata: {
+        requestedAction: "event.admin.create",
+        rootPersonId,
+        reason: "editor_or_admin_required",
+      },
+    });
+
+    return {
+      ok: false as const,
+      error: "Chỉ Admin hoặc Editor mới có quyền tạo sự kiện chung.",
+    };
+  }
+
+  if (profile.role !== "admin" && rootPersonId) {
+    const permission = await assertCanEditPerson(rootPersonId, {
+      action: "event.admin.create",
+      entityType: "event",
+      entityId: null,
+      metadata: { rootPersonId },
+    });
+
+    if (!permission.ok) {
+      return {
+        ok: false as const,
+        error:
+          permission.error ??
+          "Bạn không có quyền tạo sự kiện cho nhánh được chọn.",
+      };
+    }
+  }
+
+  return { ok: true as const, profile };
+}
+
+export async function createAdminEvent(formData: FormData) {
+  const type = normalizeEventType(formData.get("type"));
+  const rootPersonId = cleanText(formData.get("root_person_id"));
+  const brideId = cleanText(formData.get("bride_id"));
+  const groomId = cleanText(formData.get("groom_id"));
+  const relatedPersonIds = normalizeRelatedPersonIds(
+    formData.getAll("related_person_ids"),
+  );
+
+  const permission = await assertCanCreateAdminEvent(rootPersonId);
+  if (!permission.ok) return { error: permission.error };
+
+  if (type === "wedding" && !brideId && !groomId) {
+    return { error: "Sự kiện đám cưới nên chọn ít nhất cô dâu hoặc chú rể." };
+  }
+
+  try {
+    const supabase = await getSupabase();
+    const basePayload = buildEventPayload(formData);
+    const timeText = cleanText(formData.get("time_text"));
+    const invitationText = cleanText(formData.get("invitation_text"));
+    const manualDescription = cleanText(formData.get("description"));
+
+    const title =
+      basePayload.title ||
+      (type === "wedding" ? "Đám cưới / Thiệp cưới" : "Sự kiện gia đình");
+
+    const eventPayload = {
+      ...basePayload,
+      type,
+      title,
+      description:
+        type === "wedding"
+          ? buildWeddingDescription({
+              timeText,
+              invitationText,
+              description: manualDescription,
+            })
+          : manualDescription,
+      legacy_source:
+        type === "wedding" ? "manual.admin_wedding" : "manual.admin_event",
+      migration_confidence: "manual",
+    };
+
+    const { data: eventRow, error: eventError } = await supabase
+      .from("events")
+      .insert(eventPayload)
+      .select("id")
+      .single();
+
+    if (eventError || !eventRow) {
+      return {
+        error: eventError?.message ?? "Không tạo được sự kiện chung.",
+      };
+    }
+
+    const links = new Map<string, string>();
+
+    if (rootPersonId) links.set(rootPersonId, "visibility_root");
+    if (brideId) links.set(brideId, "bride");
+    if (groomId) links.set(groomId, "groom");
+
+    for (const personId of relatedPersonIds) {
+      if (!links.has(personId)) links.set(personId, "related");
+    }
+
+    if (links.size > 0) {
+      const { error: linkError } = await supabase.from("person_events").insert(
+        Array.from(links.entries()).map(([personId, role]) => ({
+          person_id: personId,
+          event_id: eventRow.id,
+          role,
+        })),
+      );
+
+      if (linkError) {
+        await supabase
+          .from("events")
+          .update({ deleted_at: new Date().toISOString() })
+          .eq("id", eventRow.id);
+
+        return { error: linkError.message };
+      }
+    }
+
+    await recordAuditLog({
+      action: "event.created",
+      entityType: "event",
+      entityId: eventRow.id,
+      entityLabel: title,
+      metadata: {
+        type,
+        rootPersonId,
+        brideId,
+        groomId,
+        relatedPersonIds,
+        timeText,
+        placeText: eventPayload.place_text,
+        source: "admin_event_form",
+      },
+    });
+
+    revalidatePath("/dashboard/events");
+    if (rootPersonId) revalidatePath(`/dashboard/members/${rootPersonId}`);
+    if (brideId) revalidatePath(`/dashboard/members/${brideId}`);
+    if (groomId) revalidatePath(`/dashboard/members/${groomId}`);
+
+    return { success: true, eventId: eventRow.id };
+  } catch (error) {
+    return {
+      error:
+        error instanceof Error
+          ? error.message
+          : "Không tạo được sự kiện chung.",
+    };
+  }
 }
 
 export async function createFamilyEvent(formData: FormData) {

@@ -51,7 +51,7 @@ export default function PersonSelector({
       const searchStr = `${p.full_name} ${p.birth_year || ""}`.toLowerCase();
       return searchStr.includes(searchTerm.toLowerCase());
     })
-    .slice(0, 20);
+    .slice(0, 5);
 
   const handleSelect = (personId: string | null) => {
     onSelect(personId);
@@ -159,7 +159,7 @@ export default function PersonSelector({
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 8, scale: 0.98 }}
             transition={{ duration: 0.2, ease: "easeOut" }}
-            className="absolute z-50 w-full mt-2 bg-white/95 backdrop-blur-xl border border-stone-200/80 rounded-xl shadow-xl max-h-80 flex flex-col overflow-hidden ring-1 ring-black/5"
+            className="absolute z-50 w-full mt-2 bg-white/95 backdrop-blur-xl border border-stone-200/80 rounded-xl shadow-xl max-h-[390px] flex flex-col overflow-hidden ring-1 ring-black/5"
           >
             <div className="p-2 border-b border-stone-100/80 bg-stone-50/50 backdrop-blur-sm sticky top-0 z-10">
               <div className="relative">
@@ -219,7 +219,7 @@ export default function PersonSelector({
                           event.preventDefault();
                           handleSelect(person.id);
                         }}
-                        className={`w-full flex items-center gap-3 px-3 py-2 text-sm rounded-lg transition-all duration-200 group/item
+                        className={`w-full min-h-[58px] flex items-center gap-3 px-3 py-2.5 text-sm rounded-lg transition-all duration-200 group/item
                           ${
                             isSelected
                               ? "bg-amber-50 text-amber-900 border border-amber-200/50 shadow-sm"
@@ -266,11 +266,9 @@ export default function PersonSelector({
                               </span>
                             ) : null}
                           </p>
-                          {person.generation != null && (
-                            <p className="text-[10px] text-stone-400 font-medium">
-                              Đời thứ {person.generation}
-                            </p>
-                          )}
+                          <p className="text-[10px] text-stone-400 font-medium">
+                            {person.generation != null ? `Đời thứ ${person.generation}` : person.gender === "male" ? "Nam" : person.gender === "female" ? "Nữ" : "Chưa rõ giới tính"}
+                          </p>
                         </div>
 
                         {isSelected && (

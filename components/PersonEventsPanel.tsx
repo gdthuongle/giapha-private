@@ -176,7 +176,7 @@ export default function PersonEventsPanel({
       <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <p className="text-sm text-stone-500">
-            Quản lý các mốc thời gian và sự kiện liên quan đến thành viên này.
+            Quản lý timeline, ngày giỗ, kết hôn, ly hôn và các mốc thời gian của thành viên này.
           </p>
         </div>
 
@@ -286,7 +286,7 @@ function EventForm({
   return (
     <form
       action={onSubmit}
-      className="mb-5 rounded-2xl border border-amber-200/70 bg-amber-50/50 p-4 shadow-sm"
+      className="mb-5 rounded-2xl border border-amber-200/70 bg-white p-4 shadow-sm ring-1 ring-amber-50"
     >
       {event ? <input type="hidden" name="event_id" value={event.id} /> : null}
 
@@ -300,7 +300,7 @@ function EventForm({
               {editing.mode === "edit" ? "Sửa sự kiện" : "Thêm sự kiện"}
             </h3>
             <p className="text-xs text-stone-500">
-              Ngày có thể nhập theo ngày, tháng/năm hoặc chỉ năm.
+              Ngày dương lịch nhập dạng dd-mm-yyyy, mm-yyyy hoặc yyyy.
             </p>
           </div>
         </div>

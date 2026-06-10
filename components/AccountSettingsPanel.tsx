@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { AlertTriangle, CheckCircle2, Database, KeyRound, RotateCcw, Save } from "lucide-react";
 import type { Person } from "@/types";
 import PersonSelector from "@/components/PersonSelector";
+import HomeAssistantTokenPanel from "@/components/home-assistant/HomeAssistantTokenPanel";
 import { createClient } from "@/utils/supabase/client";
 import { useUser } from "@/components/UserProvider";
 import {
@@ -323,6 +324,8 @@ export default function AccountSettingsPanel({ persons }: AccountSettingsPanelPr
           ))}
         </div>
       </div>
+
+      <HomeAssistantTokenPanel />
 
       <div className="rounded-2xl border border-stone-200 bg-white/90 p-5 shadow-sm">
         <div className="flex items-start gap-3">

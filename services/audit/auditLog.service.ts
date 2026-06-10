@@ -26,7 +26,10 @@ export type AuditAction =
   | "event.deleted"
   | "event.marriage_saved"
   | "event.divorce_saved"
-  | "permission.denied";
+  | "permission.denied"
+  | "home_assistant.token_created"
+  | "home_assistant.token_revoked"
+  | "home_assistant.api_accessed";
 
 export type AuditEntityType =
   | "user"
@@ -37,7 +40,8 @@ export type AuditEntityType =
   | "gedcom_session"
   | "data_maintenance"
   | "account"
-  | "system";
+  | "system"
+  | "home_assistant_token";
 
 export type AuditSeverity = "info" | "warning" | "danger";
 

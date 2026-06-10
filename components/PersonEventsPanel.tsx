@@ -43,8 +43,8 @@ const EVENT_TYPES = [
 ];
 
 const PRECISIONS = [
-  { value: "day", label: "Chính xác ngày", placeholder: "dd-mm-yyyy, ví dụ 21-07-2015" },
-  { value: "month", label: "Chỉ tháng/năm", placeholder: "mm-yyyy, ví dụ 07-2015" },
+  { value: "day", label: "Chính xác ngày", placeholder: "dd/mm/yyyy, ví dụ 21/07/2015" },
+  { value: "month", label: "Chỉ tháng/năm", placeholder: "mm/yyyy, ví dụ 07/2015" },
   { value: "year", label: "Chỉ năm", placeholder: "yyyy, ví dụ 2015" },
   { value: "unknown", label: "Không rõ ngày", placeholder: "Để trống" },
 ];
@@ -358,7 +358,7 @@ function EventForm({
               {editing.mode === "edit" ? "Sửa sự kiện" : "Thêm sự kiện"}
             </h3>
             <p className="text-xs text-stone-500">
-              Ngày dương lịch nhập dạng dd-mm-yyyy, mm-yyyy hoặc yyyy.
+              Ngày dương lịch chọn bằng lịch hoặc nhập dạng dd/mm/yyyy, mm/yyyy hoặc yyyy.
             </p>
           </div>
         </div>
@@ -434,6 +434,7 @@ function EventForm({
           Ngày dương lịch
           <input
             name="date_text"
+            type={precision === "day" ? "date" : precision === "month" ? "month" : "text"}
             inputMode="numeric"
             defaultValue={getEventDateInputValue(event)}
             disabled={precision === "unknown"}
@@ -525,13 +526,13 @@ function EventForm({
 function formatIsoDateForInput(value: string) {
   const match = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
   if (!match) return value;
-  return `${match[3]}-${match[2]}-${match[1]}`;
+  return `${match[1]}-${match[2]}-${match[3]}`;
 }
 
 function formatIsoMonthForInput(value: string) {
   const match = value.match(/^(\d{4})-(\d{2})/);
   if (!match) return value;
-  return `${match[2]}-${match[1]}`;
+  return `${match[1]}-${match[2]}`;
 }
 
 function getEventTypeLabel(type: string) {

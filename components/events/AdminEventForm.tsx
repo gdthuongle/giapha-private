@@ -12,8 +12,8 @@ const EVENT_TYPES = [
 ];
 
 const PRECISIONS = [
-  { value: "day", label: "Chính xác ngày", placeholder: "dd-mm-yyyy, ví dụ 21-07-2026" },
-  { value: "month", label: "Chỉ tháng/năm", placeholder: "mm-yyyy, ví dụ 07-2026" },
+  { value: "day", label: "Chính xác ngày", placeholder: "dd/mm/yyyy, ví dụ 21/07/2026" },
+  { value: "month", label: "Chỉ tháng/năm", placeholder: "mm/yyyy, ví dụ 07/2026" },
   { value: "year", label: "Chỉ năm", placeholder: "yyyy, ví dụ 2026" },
   { value: "unknown", label: "Không rõ ngày", placeholder: "Để trống" },
 ];
@@ -145,8 +145,10 @@ export default function AdminEventForm({ persons }: AdminEventFormProps) {
               <span className="text-xs font-bold uppercase tracking-wide text-stone-500">Ngày tổ chức</span>
               <input
                 name="date_text"
-                className="w-full rounded-xl border border-stone-200 px-3 py-2.5 text-sm outline-none transition focus:border-amber-400 focus:ring-2 focus:ring-amber-100"
-                placeholder={PRECISIONS.find((item) => item.value === precision)?.placeholder ?? "dd-mm-yyyy"}
+                type={precision === "day" ? "date" : precision === "month" ? "month" : "text"}
+                inputMode="numeric"
+                className="w-full rounded-xl border border-stone-200 px-3 py-2.5 text-sm outline-none transition focus:border-amber-400 focus:ring-2 focus:ring-amber-100 disabled:bg-stone-100 disabled:text-stone-400"
+                placeholder={PRECISIONS.find((item) => item.value === precision)?.placeholder ?? "dd/mm/yyyy"}
                 disabled={precision === "unknown"}
               />
             </label>
@@ -189,7 +191,7 @@ export default function AdminEventForm({ persons }: AdminEventFormProps) {
                 <Users2 className="size-4" />
                 Phạm vi xem
               </div>
-              Root được chọn sẽ được gắn vào sự kiện với vai trò <strong>visibility_root</strong>. Member chỉ thấy nếu root đó nằm trong vùng họ được phép xem.
+              Root được chọn sẽ được gắn vào sự kiện để dùng lại cơ chế phân quyền theo nhánh hiện có. Member chỉ thấy nếu root đó nằm trong vùng họ được phép xem.
             </div>
 
             {eventType === "wedding" ? (

@@ -107,6 +107,11 @@ function normalizeSeverity(severity: AuditSeverity | null | undefined): AuditSev
   return "info";
 }
 
+
+function isUuid(value: string | null | undefined) {
+  return !!value && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+}
+
 /**
  * Ghi audit log.
  *
@@ -120,16 +125,32 @@ export async function recordAuditLog(input: AuditLogInput) {
     const supabase = await getSupabase();
     const [user, profile] = await Promise.all([getUser(), getProfile()]);
 
+    const actorUserId = input.actorUserId ?? input.actor_user_id ?? user?.id ?? null;
+    const action = input.action || "unknown";
+    const entityType = input.entityType || input.entity_type || "system";
+    const entityId = input.entityId ?? input.entity_id ?? null;
+    const metadata = normalizeMetadata(input.metadata);
+
     const payload = {
-      actor_user_id: input.actorUserId ?? input.actor_user_id ?? user?.id ?? null,
+      // Các cột legacy còn tồn tại trong một số DB cũ.
+      // Vẫn truyền đủ để tránh lỗi NOT NULL khi audit_logs từng được tạo bởi trigger generic.
+      table_name: String(entityType),
+      record_id: isUuid(entityId) ? entityId : crypto.randomUUID(),
+      changed_by: actorUserId,
+      old_data: null,
+      new_data: metadata,
+      source: "app",
+      changed_at: new Date().toISOString(),
+
+      actor_user_id: actorUserId,
       actor_email: input.actorEmail ?? input.actor_email ?? user?.email ?? null,
       actor_role: input.actorRole ?? input.actor_role ?? profile?.role ?? null,
-      action: input.action || "unknown",
-      entity_type: input.entityType || input.entity_type || "system",
-      entity_id: input.entityId ?? input.entity_id ?? null,
+      action,
+      entity_type: entityType,
+      entity_id: entityId,
       entity_label: input.entityLabel ?? input.entity_label ?? null,
       severity: normalizeSeverity(input.severity),
-      metadata: normalizeMetadata(input.metadata),
+      metadata,
     };
 
     const { error } = await supabase.from("audit_logs").insert(payload);

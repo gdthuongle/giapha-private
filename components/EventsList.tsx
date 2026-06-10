@@ -25,7 +25,7 @@ import {
   Trash2,
   X,
 } from "lucide-react";
-import { Solar } from "lunar-javascript";
+import { Lunar, Solar } from "lunar-javascript";
 import { useRouter } from "next/navigation";
 import { useMemo, useState, useTransition } from "react";
 
@@ -60,6 +60,11 @@ type EventModelRecord = {
   start_date?: string | null;
   sort_date?: string | null;
   date_precision?: string | null;
+  lunar_year?: number | null;
+  lunar_month?: number | null;
+  lunar_day?: number | null;
+  lunar_is_leap_month?: boolean | null;
+  canonical_calendar?: string | null;
   family_id?: string | null;
   legacy_source?: string | null;
   deleted_at?: string | null;
@@ -76,6 +81,7 @@ type ExtendedFamilyEvent = Omit<FamilyEvent, "type"> & {
   eventModelId?: string;
   eventModelRootPersonId?: string | null;
   eventModelType?: "custom" | "marriage";
+  lunarDateLabel?: string | null;
 };
 
 const DAY_LABELS: Record<string, string> = {
@@ -122,6 +128,60 @@ function parseIsoLocalDate(value?: string | null) {
   const date = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
   if (Number.isNaN(date.getTime())) return null;
   return startOfLocalDay(date);
+}
+
+function formatLunarEventLabel(event: {
+  lunar_year?: number | null;
+  lunar_month?: number | null;
+  lunar_day?: number | null;
+  lunar_is_leap_month?: boolean | null;
+}) {
+  if (!event.lunar_year && !event.lunar_month && !event.lunar_day) return null;
+
+  const day = event.lunar_day ? String(event.lunar_day).padStart(2, "0") : "??";
+  const month = event.lunar_month ? String(event.lunar_month).padStart(2, "0") : "??";
+  const year = event.lunar_year ? String(event.lunar_year) : "????";
+  const leap = event.lunar_is_leap_month ? " nhuận" : "";
+
+  return `${day}/${month}/${year}${leap} ÂL`;
+}
+
+function parseLunarDateText(value: string) {
+  const raw = value.trim();
+  const ddmmyyyy = raw.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})$/);
+  const yyyymmdd = raw.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+
+  if (ddmmyyyy) {
+    return {
+      day: Number(ddmmyyyy[1]),
+      month: Number(ddmmyyyy[2]),
+      year: Number(ddmmyyyy[3]),
+    };
+  }
+
+  if (yyyymmdd) {
+    return {
+      year: Number(yyyymmdd[1]),
+      month: Number(yyyymmdd[2]),
+      day: Number(yyyymmdd[3]),
+    };
+  }
+
+  return null;
+}
+
+function lunarToSolarIso(input: { year: number; month: number; day: number; isLeap: boolean }) {
+  if (input.month < 1 || input.month > 12) return null;
+  if (input.day < 1 || input.day > 30) return null;
+
+  try {
+    const lunarMonth = input.isLeap ? -input.month : input.month;
+    const solar = Lunar.fromYmd(input.year, lunarMonth, input.day).getSolar();
+    return `${String(solar.getYear()).padStart(4, "0")}-${String(solar.getMonth()).padStart(2, "0")}-${String(solar.getDay()).padStart(2, "0")}`;
+  } catch (error) {
+    console.error(error);
+    return null;
+  }
 }
 
 function differenceInDays(from: Date, to: Date) {
@@ -192,6 +252,7 @@ function buildEventModelEvents(input: {
     const originYear = eventDate.getFullYear();
     const originMonth = eventDate.getMonth() + 1;
     const originDay = eventDate.getDate();
+    const lunarDateLabel = formatLunarEventLabel(event);
 
     if (event.type === "marriage") {
       const isFutureOrToday = eventDate.getTime() >= today.getTime();
@@ -215,6 +276,7 @@ function buildEventModelEvents(input: {
         originMonth,
         originDay,
         eventDateLabel: `${String(originDay).padStart(2, "0")}/${String(originMonth).padStart(2, "0")}`,
+        lunarDateLabel,
         location: event.place_text ?? undefined,
         content: event.description ?? undefined,
         isDeceased: false,
@@ -236,6 +298,7 @@ function buildEventModelEvents(input: {
       originMonth,
       originDay,
       eventDateLabel: `${String(originDay).padStart(2, "0")}/${String(originMonth).padStart(2, "0")}/${originYear}`,
+      lunarDateLabel,
       location: event.place_text ?? undefined,
       content: event.description ?? undefined,
       isDeceased: false,
@@ -321,6 +384,8 @@ function EventCard({
     }
     if (event.type === "death_anniversary") {
       label += ` (Âm lịch: ${event.eventDateLabel.replace(" ÂL", "")})`;
+    } else if (event.lunarDateLabel) {
+      label += ` · ${event.lunarDateLabel}`;
     }
     return label;
   })();
@@ -468,10 +533,48 @@ function SharedEventCreateForm({
 }) {
   const [precision, setPrecision] = useState("day");
   const [rootPersonId, setRootPersonId] = useState<string | null>(null);
+  const [calendarMode, setCalendarMode] = useState<"gregorian" | "lunar">("gregorian");
+  const [lunarDateText, setLunarDateText] = useState("");
+  const [lunarIsLeapMonth, setLunarIsLeapMonth] = useState(false);
+
+  const handleSubmit = (formData: FormData) => {
+    if (calendarMode === "lunar") {
+      if (precision !== "day") {
+        window.alert("Ngày âm lịch hiện chỉ hỗ trợ nhập chính xác ngày dd/mm/yyyy.");
+        return;
+      }
+
+      const parsed = parseLunarDateText(lunarDateText);
+      if (!parsed) {
+        window.alert("Ngày âm lịch phải có dạng dd/mm/yyyy, ví dụ 20/04/2026.");
+        return;
+      }
+
+      const iso = lunarToSolarIso({ ...parsed, isLeap: lunarIsLeapMonth });
+      if (!iso) {
+        window.alert("Không chuyển đổi được ngày âm lịch sang dương lịch. Vui lòng kiểm tra lại ngày/tháng/năm âm lịch.");
+        return;
+      }
+
+      formData.set("date_text", iso);
+      formData.set("date_precision", "day");
+      formData.set("lunar_year", String(parsed.year));
+      formData.set("lunar_month", String(parsed.month));
+      formData.set("lunar_day", String(parsed.day));
+      formData.set("lunar_is_leap_month", lunarIsLeapMonth ? "true" : "false");
+    } else {
+      formData.delete("lunar_year");
+      formData.delete("lunar_month");
+      formData.delete("lunar_day");
+      formData.delete("lunar_is_leap_month");
+    }
+
+    onSubmit(formData, rootPersonId);
+  };
 
   return (
     <form
-      action={(formData) => onSubmit(formData, rootPersonId)}
+      action={handleSubmit}
       className="rounded-2xl border border-stone-200 bg-stone-50/70 p-4 shadow-inner"
     >
       <input type="hidden" name="type" value="custom" />
@@ -529,16 +632,62 @@ function SharedEventCreateForm({
           </select>
         </label>
 
-        <label className="block text-sm font-medium text-stone-700">
-          Ngày dương lịch
-          <input
-            name="date_text"
-            type={precision === "day" ? "date" : precision === "month" ? "month" : "text"}
-            disabled={precision === "unknown"}
-            placeholder={precision === "year" ? "yyyy" : precision === "month" ? "mm/yyyy" : "dd/mm/yyyy"}
-            className="mt-1 w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-stone-900 placeholder-stone-400 shadow-sm focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500 disabled:bg-stone-100 disabled:text-stone-400"
-          />
-        </label>
+        <div className="block text-sm font-medium text-stone-700">
+          <div className="mb-1 flex items-center justify-between gap-2">
+            <span>Loại lịch</span>
+            <div className="inline-flex rounded-lg border border-stone-200 bg-white p-1 text-xs font-semibold">
+              <button
+                type="button"
+                onClick={() => setCalendarMode("gregorian")}
+                className={`rounded-md px-2.5 py-1 transition ${calendarMode === "gregorian" ? "bg-amber-500 text-white" : "text-stone-500 hover:text-stone-800"}`}
+              >
+                Dương lịch
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setCalendarMode("lunar");
+                  setPrecision("day");
+                }}
+                className={`rounded-md px-2.5 py-1 transition ${calendarMode === "lunar" ? "bg-amber-500 text-white" : "text-stone-500 hover:text-stone-800"}`}
+              >
+                Âm lịch
+              </button>
+            </div>
+          </div>
+
+          {calendarMode === "gregorian" ? (
+            <input
+              name="date_text"
+              type={precision === "day" ? "date" : precision === "month" ? "month" : "text"}
+              disabled={precision === "unknown"}
+              placeholder={precision === "year" ? "yyyy" : precision === "month" ? "mm/yyyy" : "dd/mm/yyyy"}
+              className="w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-stone-900 placeholder-stone-400 shadow-sm focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500 disabled:bg-stone-100 disabled:text-stone-400"
+            />
+          ) : (
+            <div className="space-y-2">
+              <input
+                type="text"
+                value={lunarDateText}
+                onChange={(event) => setLunarDateText(event.target.value)}
+                placeholder="dd/mm/yyyy âm lịch, ví dụ 20/04/2026"
+                className="w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-stone-900 placeholder-stone-400 shadow-sm focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
+              />
+              <label className="flex items-center gap-2 text-xs font-medium text-stone-600">
+                <input
+                  type="checkbox"
+                  checked={lunarIsLeapMonth}
+                  onChange={(event) => setLunarIsLeapMonth(event.target.checked)}
+                  className="size-4 rounded border-stone-300 text-amber-500 focus:ring-amber-500"
+                />
+                Tháng âm lịch nhuận
+              </label>
+              <p className="text-xs leading-5 text-stone-500">
+                Hệ thống sẽ tự đổi sang ngày dương lịch để sắp xếp/đếm ngược, đồng thời lưu ngày âm lịch để hiển thị.
+              </p>
+            </div>
+          )}
+        </div>
 
         <label className="block text-sm font-medium text-stone-700 sm:col-span-2">
           Địa điểm

@@ -71,7 +71,8 @@ type PersonEventLink = {
   role?: string | null;
 };
 
-type ExtendedFamilyEvent = FamilyEvent & {
+type ExtendedFamilyEvent = Omit<FamilyEvent, "type"> & {
+  type: FamilyEvent["type"] | "marriage_upcoming" | "marriage_anniversary";
   eventModelId?: string;
   eventModelRootPersonId?: string | null;
   eventModelType?: "custom" | "marriage";

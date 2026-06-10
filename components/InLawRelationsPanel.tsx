@@ -42,7 +42,7 @@ function InLawCell({ items }: { items: InLawPersonItem[] }) {
   }
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-1.5">
       {items.map((item) => (
         <LineagePersonCard
           key={`${item.person.id}-${item.side}-${item.branch}-${item.generation}-${item.isInLaw ? "inlaw" : "blood"}`}
@@ -50,7 +50,7 @@ function InLawCell({ items }: { items: InLawPersonItem[] }) {
           relationLabel={item.relationLabel}
           addressHint={item.addressHint}
           note={item.note}
-          compact={items.length > 3}
+          compact={items.length > 2}
         />
       ))}
     </div>
@@ -378,36 +378,36 @@ export default function InLawRelationsPanel({
       ) : null}
 
       <div className="overflow-x-auto rounded-2xl border border-stone-200 bg-white shadow-sm">
-        <table className="min-w-[1320px] w-full border-collapse text-sm">
+        <table className="min-w-[1040px] w-full border-collapse text-sm">
           <thead className="bg-stone-50 text-left text-xs uppercase tracking-wider text-stone-500">
             <tr>
-              <th className="w-32 border-b border-stone-200 px-4 py-3">Đời</th>
-              <th className="w-[18%] border-b border-stone-200 px-4 py-3 text-sky-800">Nội bên người gốc</th>
-              <th className="w-[18%] border-b border-stone-200 px-4 py-3 text-rose-800">Ngoại bên người gốc</th>
-              <th className="w-[20%] border-b border-stone-200 px-4 py-3 text-amber-800">Cặp vợ chồng / hậu duệ</th>
-              <th className="w-[18%] border-b border-stone-200 px-4 py-3 text-sky-800">Nội bên vợ/chồng</th>
-              <th className="w-[18%] border-b border-stone-200 px-4 py-3 text-rose-800">Ngoại bên vợ/chồng</th>
+              <th className="w-24 border-b border-stone-200 px-2.5 py-3">Đời</th>
+              <th className="w-[18%] border-b border-stone-200 px-2.5 py-3 text-sky-800">Nội bên người gốc</th>
+              <th className="w-[18%] border-b border-stone-200 px-2.5 py-3 text-rose-800">Ngoại bên người gốc</th>
+              <th className="w-[20%] border-b border-stone-200 px-2.5 py-3 text-amber-800">Cặp vợ chồng / hậu duệ</th>
+              <th className="w-[18%] border-b border-stone-200 px-2.5 py-3 text-sky-800">Nội bên vợ/chồng</th>
+              <th className="w-[18%] border-b border-stone-200 px-2.5 py-3 text-rose-800">Ngoại bên vợ/chồng</th>
             </tr>
           </thead>
           <tbody>
             {graph.rows.map((row) => (
               <tr key={row.generation} className={row.generation === 0 ? "bg-amber-50/40" : "odd:bg-white even:bg-stone-50/40"}>
-                <td className="align-top border-b border-stone-100 px-4 py-4 font-semibold text-stone-700">
+                <td className="align-top border-b border-stone-100 px-2.5 py-3 font-semibold text-stone-700">
                   {row.label}
                 </td>
-                <td className="align-top border-b border-stone-100 px-4 py-4">
+                <td className="align-top border-b border-stone-100 px-2.5 py-3">
                   <InLawCell items={row.rootPaternal} />
                 </td>
-                <td className="align-top border-b border-stone-100 px-4 py-4">
+                <td className="align-top border-b border-stone-100 px-2.5 py-3">
                   <InLawCell items={row.rootMaternal} />
                 </td>
-                <td className="align-top border-b border-stone-100 px-4 py-4">
+                <td className="align-top border-b border-stone-100 px-2.5 py-3">
                   <InLawCell items={row.couple} />
                 </td>
-                <td className="align-top border-b border-stone-100 px-4 py-4">
+                <td className="align-top border-b border-stone-100 px-2.5 py-3">
                   <InLawCell items={row.spousePaternal} />
                 </td>
-                <td className="align-top border-b border-stone-100 px-4 py-4">
+                <td className="align-top border-b border-stone-100 px-2.5 py-3">
                   <InLawCell items={row.spouseMaternal} />
                 </td>
               </tr>

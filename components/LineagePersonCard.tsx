@@ -1,19 +1,25 @@
 import Link from "next/link";
 import type { Person } from "@/types";
 
-function getPersonLabel(person: Person): string {
-  const years = [person.birth_year, person.death_year]
-    .filter((value): value is number => typeof value === "number")
-    .join("–");
+function getYearsAndAgeLabel(person: Person): string | null {
+  const birthYear = typeof person.birth_year === "number" ? person.birth_year : null;
+  const deathYear = typeof person.death_year === "number" ? person.death_year : null;
 
-  if (years) return `${person.full_name} (${years})`;
-  return person.full_name;
-}
+  if (!birthYear && !deathYear) return null;
 
-function getGenderPill(person: Person): string {
-  if (person.gender === "male") return "Nam";
-  if (person.gender === "female") return "Nữ";
-  return "Khác";
+  const currentYear = new Date().getFullYear();
+  const endYear = deathYear ?? currentYear;
+  const age = birthYear ? Math.max(0, endYear - birthYear) : null;
+
+  if (birthYear && deathYear) {
+    return `${birthYear}–${deathYear}${age !== null ? ` (${age} tuổi)` : ""}`;
+  }
+
+  if (birthYear) {
+    return `${birthYear}${age !== null ? ` (${age} tuổi)` : ""}`;
+  }
+
+  return `Mất ${deathYear}`;
 }
 
 function getCardClass(person: Person): string {
@@ -39,29 +45,33 @@ export default function LineagePersonCard({
   addressHint?: string;
   compact?: boolean;
 }) {
+  const yearsAndAge = getYearsAndAgeLabel(person);
+  const kinshipLabel = addressHint || relationLabel;
+  const secondaryLabel = addressHint && addressHint !== relationLabel ? relationLabel : null;
+
   return (
     <Link
       href={`/dashboard/members/${person.id}`}
-      className={`block rounded-xl border px-3 py-2 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md ${getCardClass(person)}`}
+      className={`block rounded-xl border px-2.5 py-2 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md ${getCardClass(person)}`}
     >
-      <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0">
-          <p className="truncate text-sm font-bold leading-tight">{getPersonLabel(person)}</p>
-          <p className="mt-0.5 text-xs font-medium text-stone-500">{relationLabel}</p>
-        </div>
-        <span className="shrink-0 rounded-full bg-white/75 px-2 py-0.5 text-[10px] font-semibold text-stone-500 ring-1 ring-stone-200">
-          {getGenderPill(person)}
-        </span>
-      </div>
+      <p className="truncate text-[13px] font-bold leading-tight">{person.full_name}</p>
 
-      {!compact && addressHint ? (
-        <p className="mt-1 rounded-lg bg-white/65 px-2 py-1 text-xs leading-snug text-stone-600 ring-1 ring-white/70">
-          {addressHint}
+      {yearsAndAge ? (
+        <p className="mt-0.5 truncate text-[11px] leading-tight text-stone-500">
+          {yearsAndAge}
         </p>
       ) : null}
 
+      <p className="mt-1 rounded-lg bg-white/65 px-2 py-1 text-[11px] font-semibold leading-snug text-stone-700 ring-1 ring-white/70">
+        {kinshipLabel}
+      </p>
+
+      {!compact && secondaryLabel ? (
+        <p className="mt-1 text-[11px] leading-snug text-stone-500">{secondaryLabel}</p>
+      ) : null}
+
       {!compact && note ? (
-        <p className="mt-1 text-xs leading-snug text-stone-500">{note}</p>
+        <p className="mt-1 text-[11px] leading-snug text-stone-500">{note}</p>
       ) : null}
     </Link>
   );

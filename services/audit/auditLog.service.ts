@@ -182,10 +182,37 @@ export async function recordAuditLog(input: AuditLogInput) {
       metadata,
     };
 
-    // Ưu tiên service-role để audit không phụ thuộc RLS/cookie của Server Action.
-    // Nếu thiếu service key thì fallback về user client để vẫn chạy được môi trường dev.
+    const userClient = await getSupabase();
+
+    // Ưu tiên RPC SECURITY DEFINER để audit log không phụ thuộc vào schema cũ
+    // hoặc RLS insert trực tiếp. Nếu RPC chưa được migrate thì fallback xuống insert.
+    const { error: rpcError } = await userClient.rpc("insert_audit_log", {
+      p_action: action,
+      p_entity_type: entityType,
+      p_entity_id: entityId,
+      p_entity_label: entityLabel,
+      p_severity: normalizeSeverity(input.severity),
+      p_metadata: metadata,
+      p_actor_user_id: actorUserId,
+      p_actor_email: actorEmail,
+      p_actor_role: actorRole,
+    });
+
+    if (!rpcError) {
+      return { ok: true as const };
+    }
+
+    console.error("Audit RPC failed, falling back to direct insert:", {
+      message: rpcError.message,
+      details: rpcError.details,
+      hint: rpcError.hint,
+      code: rpcError.code,
+    });
+
+    // Nếu thiếu RPC ở môi trường dev hoặc chưa chạy migration, dùng service role nếu có,
+    // nếu không thì dùng user client.
     const serviceClient = getAuditSupabaseClient();
-    const supabase = serviceClient ?? (await getSupabase());
+    const supabase = serviceClient ?? userClient;
 
     const { error } = await supabase.from("audit_logs").insert(payload);
 

@@ -81,7 +81,7 @@ type ExtendedFamilyEvent = Omit<FamilyEvent, "type"> & {
   type: FamilyEvent["type"] | "marriage_upcoming" | "marriage_anniversary" | "death_recent";
   eventModelId?: string;
   eventModelRootPersonId?: string | null;
-  eventModelType?: "custom" | "marriage";
+  eventModelType?: "custom" | "marriage" | "death_anniversary" | "wedding";
   lunarDateLabel?: string | null;
 };
 
@@ -94,7 +94,7 @@ const DAY_LABELS: Record<string, string> = {
 const FILTER_TABS = [
   { key: "all", label: "Tất cả" },
   { key: "birthday", label: "Sinh nhật" },
-  { key: "death_anniversary", label: "Ngày giỗ / chia buồn" },
+  { key: "death_anniversary", label: "Ngày giỗ" },
   { key: "marriage", label: "Cưới / kỷ niệm cưới" },
   { key: "custom_event", label: "Tuỳ chỉnh" },
   { key: "past", label: "Đã qua" },
@@ -202,6 +202,53 @@ function nextYearlyOccurrence(month: number, day: number) {
   return startOfLocalDay(occurrence);
 }
 
+function nextSolarForLunar(
+  lunarMonth: number,
+  lunarDay: number,
+  fromDate: Date,
+  isLeapMonth = false,
+) {
+  try {
+    const todaySolar = Solar.fromYmd(
+      fromDate.getFullYear(),
+      fromDate.getMonth() + 1,
+      fromDate.getDate(),
+    );
+    const currentLunarYear = todaySolar.getLunar().getYear();
+    const lunarMonthValue = isLeapMonth ? -lunarMonth : lunarMonth;
+
+    for (let offset = 0; offset <= 2; offset += 1) {
+      try {
+        const lunar = Lunar.fromYmd(currentLunarYear + offset, lunarMonthValue, lunarDay);
+        const solar = lunar.getSolar();
+        const candidate = startOfLocalDay(
+          new Date(solar.getYear(), solar.getMonth() - 1, solar.getDay()),
+        );
+        if (candidate.getTime() >= startOfLocalDay(fromDate).getTime()) return candidate;
+      } catch {
+        // Leap lunar months do not exist every year; try the next lunar year.
+      }
+    }
+  } catch (error) {
+    console.error(error);
+  }
+
+  return null;
+}
+
+function nextMemorialOccurrence(event: EventModelRecord, eventDate: Date, today: Date) {
+  if (event.lunar_month && event.lunar_day) {
+    return nextSolarForLunar(
+      event.lunar_month,
+      event.lunar_day,
+      today,
+      Boolean(event.lunar_is_leap_month),
+    );
+  }
+
+  return nextYearlyOccurrence(eventDate.getMonth() + 1, eventDate.getDate());
+}
+
 function getPrincipalNames(input: {
   eventId: string;
   personEvents: PersonEventLink[];
@@ -237,7 +284,14 @@ function buildEventModelEvents(input: {
 
   for (const event of input.events) {
     if (event.deleted_at) continue;
-    if (event.type !== "custom" && event.type !== "marriage" && event.type !== "death") continue;
+    if (
+      event.type !== "custom" &&
+      event.type !== "marriage" &&
+      event.type !== "wedding" &&
+      event.type !== "death_anniversary"
+    ) {
+      continue;
+    }
 
     const eventDate = parseIsoLocalDate(event.start_date || event.sort_date);
     if (!eventDate) continue;
@@ -256,35 +310,39 @@ function buildEventModelEvents(input: {
     const lunarDateLabel = formatLunarEventLabel(event);
 
 
-    if (event.type === "death") {
-      const daysUntil = differenceInDays(today, eventDate);
-      if (daysUntil < -5 || daysUntil > 0) continue;
+    if (event.type === "death_anniversary") {
+      const nextOccurrence = nextMemorialOccurrence(event, eventDate, today);
+      if (!nextOccurrence) continue;
 
-      const principalName = names[0] || event.title || "người thân";
+      const daysUntil = differenceInDays(today, nextOccurrence);
+      const principalName = names[0] || "người thân";
+      const memorialDateLabel = event.lunar_month && event.lunar_day
+        ? `${String(event.lunar_day).padStart(2, "0")}/${String(event.lunar_month).padStart(2, "0")}${event.lunar_is_leap_month ? " nhuận" : ""} ÂL`
+        : `${String(originDay).padStart(2, "0")}/${String(originMonth).padStart(2, "0")}`;
 
       out.push({
-        type: "death_recent",
+        type: "death_anniversary",
         personId: fallbackPersonId ?? rootPersonId ?? undefined,
-        personName: event.title || principalName,
-        nextOccurrence: eventDate,
+        personName: principalName,
+        nextOccurrence,
         daysUntil,
-        originYear,
-        originMonth,
-        originDay,
-        eventDateLabel: `${String(originDay).padStart(2, "0")}/${String(originMonth).padStart(2, "0")}/${originYear}`,
+        originYear: event.lunar_year ?? originYear,
+        originMonth: event.lunar_month ?? originMonth,
+        originDay: event.lunar_day ?? originDay,
+        eventDateLabel: memorialDateLabel,
         lunarDateLabel,
         location: event.place_text ?? undefined,
         content: event.description ?? undefined,
         isDeceased: true,
         eventModelId: event.id,
         eventModelRootPersonId: rootPersonId ?? fallbackPersonId ?? null,
-        eventModelType: "custom",
+        eventModelType: "death_anniversary",
       } as ExtendedFamilyEvent);
 
       continue;
     }
 
-    if (event.type === "marriage") {
+    if (event.type === "marriage" || event.type === "wedding") {
       const isFutureOrToday = eventDate.getTime() >= today.getTime();
       const nextOccurrence = isFutureOrToday
         ? eventDate
@@ -312,7 +370,7 @@ function buildEventModelEvents(input: {
         isDeceased: false,
         eventModelId: event.id,
         eventModelRootPersonId: rootPersonId ?? fallbackPersonId ?? null,
-        eventModelType: "marriage",
+        eventModelType: event.type === "wedding" ? "wedding" : "marriage",
       } as ExtendedFamilyEvent);
 
       continue;
@@ -346,7 +404,7 @@ function isMarriageEventType(type: string) {
 }
 
 function isMemorialEventType(type: string) {
-  return type === "death_anniversary" || type === "death_recent" || type === "death";
+  return type === "death_anniversary";
 }
 
 function EventCard({
@@ -586,8 +644,11 @@ function SharedEventCreateForm({
   onCancel: () => void;
   onSubmit: (formData: FormData, rootPersonId: string | null) => void;
 }) {
+  const [eventType, setEventType] = useState<"custom" | "wedding">("custom");
   const [precision, setPrecision] = useState("day");
   const [rootPersonId, setRootPersonId] = useState<string | null>(null);
+  const [brideId, setBrideId] = useState<string | null>(null);
+  const [groomId, setGroomId] = useState<string | null>(null);
   const [calendarMode, setCalendarMode] = useState<"gregorian" | "lunar">("gregorian");
   const [lunarDateText, setLunarDateText] = useState("");
   const [lunarIsLeapMonth, setLunarIsLeapMonth] = useState(false);
@@ -624,6 +685,21 @@ function SharedEventCreateForm({
       formData.delete("lunar_is_leap_month");
     }
 
+    formData.set("type", eventType);
+    if (eventType === "wedding") {
+      if (!brideId && !groomId) {
+        window.alert("Sự kiện đám cưới cần chọn cô dâu hoặc chú rể.");
+        return;
+      }
+      if (brideId) formData.set("bride_id", brideId);
+      if (groomId) formData.set("groom_id", groomId);
+    } else {
+      formData.delete("bride_id");
+      formData.delete("groom_id");
+      formData.delete("invitation_text");
+      formData.delete("time_text");
+    }
+
     onSubmit(formData, rootPersonId);
   };
 
@@ -632,12 +708,12 @@ function SharedEventCreateForm({
       action={handleSubmit}
       className="rounded-2xl border border-stone-200 bg-stone-50/70 p-4 shadow-inner"
     >
-      <input type="hidden" name="type" value="custom" />
+      <input type="hidden" name="type" value={eventType} />
       <input type="hidden" name="date_precision" value={precision} />
 
       <div className="mb-4 flex items-center justify-between gap-3">
         <div>
-          <h3 className="text-sm font-bold text-stone-800">Thêm sự kiện chung</h3>
+          <h3 className="text-sm font-bold text-stone-800">Thêm sự kiện</h3>
           <p className="text-xs text-stone-500">
             Chọn gốc hiển thị để thành viên trong nhánh được phép có thể thấy sự kiện này.
           </p>
@@ -664,11 +740,44 @@ function SharedEventCreateForm({
         </div>
 
         <label className="block text-sm font-medium text-stone-700 sm:col-span-2">
+          Loại sự kiện
+          <select
+            value={eventType}
+            onChange={(event) => setEventType(event.target.value as "custom" | "wedding")}
+            className="mt-1 w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-stone-900 shadow-sm focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
+          >
+            <option value="custom">Sự kiện chung</option>
+            <option value="wedding">Đám cưới / Thiệp cưới</option>
+          </select>
+        </label>
+
+        {eventType === "wedding" ? (
+          <div className="grid grid-cols-1 gap-4 sm:col-span-2 sm:grid-cols-2">
+            <PersonSelector
+              persons={persons}
+              selectedId={brideId}
+              onSelect={setBrideId}
+              label="Cô dâu"
+              placeholder="Chọn cô dâu"
+              className="w-full"
+            />
+            <PersonSelector
+              persons={persons}
+              selectedId={groomId}
+              onSelect={setGroomId}
+              label="Chú rể"
+              placeholder="Chọn chú rể"
+              className="w-full"
+            />
+          </div>
+        ) : null}
+
+        <label className="block text-sm font-medium text-stone-700 sm:col-span-2">
           Tiêu đề
           <input
             name="title"
-            required
-            placeholder="Ví dụ: Họp mặt gia đình, Cúng giỗ, Lễ truyền thống..."
+            required={eventType !== "wedding"}
+            placeholder={eventType === "wedding" ? "Ví dụ: Thiệp cưới Nguyễn Văn A và Trần Thị B" : "Ví dụ: Họp mặt gia đình, Cúng giỗ, Lễ truyền thống..."}
             className="mt-1 w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-stone-900 placeholder-stone-400 shadow-sm focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
           />
         </label>
@@ -744,7 +853,18 @@ function SharedEventCreateForm({
           )}
         </div>
 
-        <label className="block text-sm font-medium text-stone-700 sm:col-span-2">
+        {eventType === "wedding" ? (
+          <label className="block text-sm font-medium text-stone-700">
+            Giờ tổ chức
+            <input
+              name="time_text"
+              type="time"
+              className="mt-1 w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-stone-900 placeholder-stone-400 shadow-sm focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
+            />
+          </label>
+        ) : null}
+
+        <label className={`block text-sm font-medium text-stone-700 ${eventType === "wedding" ? "" : "sm:col-span-2"}`}>
           Địa điểm
           <input
             name="place_text"
@@ -752,6 +872,18 @@ function SharedEventCreateForm({
             className="mt-1 w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-stone-900 placeholder-stone-400 shadow-sm focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
           />
         </label>
+
+        {eventType === "wedding" ? (
+          <label className="block text-sm font-medium text-stone-700 sm:col-span-2">
+            Nội dung thiệp cưới / thông báo
+            <textarea
+              name="invitation_text"
+              rows={3}
+              placeholder="Nhập nội dung thiệp cưới hoặc lời mời"
+              className="mt-1 w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-stone-900 placeholder-stone-400 shadow-sm focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
+            />
+          </label>
+        ) : null}
 
         <label className="block text-sm font-medium text-stone-700 sm:col-span-2">
           Nội dung / ghi chú
@@ -915,7 +1047,11 @@ export default function EventsList({
       persons,
     });
 
-    return [...baseEvents, ...modelEvents].sort(
+    const baseEventsWithoutDeathDates = baseEvents.filter(
+      (event) => event.type !== "death_anniversary",
+    );
+
+    return [...baseEventsWithoutDeathDates, ...modelEvents].sort(
       (a, b) => a.daysUntil - b.daysUntil || a.nextOccurrence.getTime() - b.nextOccurrence.getTime(),
     );
   }, [persons, customEvents, eventModelEvents, personEvents]);
@@ -1077,7 +1213,7 @@ export default function EventsList({
           <CalendarDays className="size-10 mx-auto mb-3 opacity-40" />
           <p className="font-medium">Không có sự kiện nào</p>
           <p className="text-sm mt-1">
-            Hãy bổ sung ngày sinh, ngày mất hoặc sự kiện chung cho thành viên
+            Hãy bổ sung ngày sinh, ngày giỗ hoặc sự kiện chung cho thành viên
           </p>
         </div>
       ) : (

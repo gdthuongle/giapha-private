@@ -8,6 +8,7 @@ import { revalidatePath } from "next/cache";
 const ALLOWED_EVENT_TYPES = new Set([
   "birth",
   "death",
+  "death_anniversary",
   "marriage",
   "divorce",
   "burial",
@@ -594,8 +595,8 @@ export async function createAdminEvent(formData: FormData) {
     const links = new Map<string, string>();
 
     if (rootPersonId) links.set(rootPersonId, "visibility_root");
-    if (brideId) links.set(brideId, "bride");
-    if (groomId) links.set(groomId, "groom");
+    if (brideId) links.set(brideId, "wife");
+    if (groomId) links.set(groomId, "husband");
 
     if (links.size > 0) {
       const { error: linkError } = await supabase.from("person_events").insert(
@@ -883,7 +884,10 @@ export async function createPersonEvent(formData: FormData) {
     const { error: linkError } = await supabase.from("person_events").insert({
       person_id: personId,
       event_id: eventRow.id,
-      role: eventPayload.type === "death" ? "deceased" : "principal",
+      role:
+        eventPayload.type === "death" || eventPayload.type === "death_anniversary"
+          ? "deceased"
+          : "principal",
     });
 
     if (linkError) {

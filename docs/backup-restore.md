@@ -101,3 +101,28 @@ Cảnh báo: file backup được tạo với `--clean --if-exists`, nên restor
 - Thư mục `backups/` đã được đưa vào `.gitignore`.
 - Không gửi file backup database vào GitHub hoặc chat nếu có dữ liệu thật.
 - Nên sao chép backup định kỳ sang nơi lưu trữ khác như NAS, ổ ngoài hoặc cloud riêng.
+
+## Quản lý backup trong giao diện Admin
+
+Sau khi triển khai bản Backup Admin UI, quản trị viên có thể mở:
+
+```text
+/dashboard/data-maintenance/backups
+```
+
+Trang này cho phép:
+
+- Chạy backup database ngay.
+- Xem danh sách file backup `.sql.gz`.
+- Tải file backup về máy.
+- Xóa file backup cũ.
+- Cấu hình số bản backup gần nhất cần giữ.
+- Chạy cleanup theo retention.
+
+Cấu hình retention từ giao diện được lưu tại:
+
+```text
+backups/backup-config.json
+```
+
+File này nằm trong thư mục `backups/`, đã được `.gitignore`, không commit lên Git.

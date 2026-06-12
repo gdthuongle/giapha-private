@@ -1,7 +1,7 @@
 #!/usr/bin/env tsx
 
 import { createGzip } from "node:zlib";
-import { createWriteStream, existsSync, mkdirSync, readdirSync, statSync, unlinkSync } from "node:fs";
+import { createWriteStream, existsSync, mkdirSync, readFileSync, readdirSync, statSync, unlinkSync } from "node:fs";
 import { basename, join, resolve } from "node:path";
 import { spawn } from "node:child_process";
 import process from "node:process";
@@ -22,6 +22,11 @@ type BackupFile = {
 const DEFAULT_KEEP_LAST = 14;
 const DEFAULT_BACKUP_DIR = "backups/database";
 const DEFAULT_PREFIX = "giapha-db";
+const DEFAULT_CONFIG_PATH = "backups/backup-config.json";
+
+type BackupConfig = {
+  keepLast?: number;
+};
 
 function getEnv(name: string) {
   const value = process.env[name];
@@ -41,16 +46,44 @@ function getBackupDir() {
   return resolve(getEnv("BACKUP_DIR") || DEFAULT_BACKUP_DIR);
 }
 
-function getKeepLast() {
-  const raw = getEnv("BACKUP_KEEP_LAST");
-  if (!raw) return DEFAULT_KEEP_LAST;
+function getConfigPath() {
+  return resolve(getEnv("BACKUP_CONFIG_PATH") || DEFAULT_CONFIG_PATH);
+}
+
+function readBackupConfig(): BackupConfig {
+  const configPath = getConfigPath();
+  if (!existsSync(configPath)) return {};
+
+  try {
+    return JSON.parse(readFileSync(configPath, "utf8")) as BackupConfig;
+  } catch (error) {
+    console.warn(
+      `Không đọc được backup config ${configPath}: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    );
+    return {};
+  }
+}
+
+function parseKeepLast(raw: string | number | undefined, source: string) {
+  if (raw === undefined || raw === null || raw === "") return undefined;
 
   const parsed = Number(raw);
   if (!Number.isInteger(parsed) || parsed < 1) {
-    throw new Error(`BACKUP_KEEP_LAST không hợp lệ: ${raw}. Giá trị phải là số nguyên >= 1.`);
+    throw new Error(`${source} không hợp lệ: ${raw}. Giá trị phải là số nguyên >= 1.`);
   }
 
   return parsed;
+}
+
+function getKeepLast() {
+  // Ưu tiên config do Admin UI lưu, rồi mới fallback về biến môi trường.
+  const configKeepLast = parseKeepLast(readBackupConfig().keepLast, "backup-config.keepLast");
+  if (configKeepLast) return configKeepLast;
+
+  const envKeepLast = parseKeepLast(getEnv("BACKUP_KEEP_LAST"), "BACKUP_KEEP_LAST");
+  return envKeepLast ?? DEFAULT_KEEP_LAST;
 }
 
 function getPrefix() {
@@ -249,6 +282,7 @@ Biến môi trường:
   DATABASE_BACKUP_URL     Connection string PostgreSQL/Supabase dùng cho pg_dump
   BACKUP_DIR              Thư mục lưu backup, mặc định: ${DEFAULT_BACKUP_DIR}
   BACKUP_KEEP_LAST        Số bản backup mới nhất cần giữ, mặc định: ${DEFAULT_KEEP_LAST}
+  BACKUP_CONFIG_PATH      File config do Admin UI lưu, mặc định: ${DEFAULT_CONFIG_PATH}
   BACKUP_PREFIX           Prefix tên file, mặc định: ${DEFAULT_PREFIX}
 
 Ví dụ cron hằng ngày lúc 02:30:

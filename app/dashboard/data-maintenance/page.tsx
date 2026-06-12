@@ -195,6 +195,14 @@ export default async function DataMaintenancePage() {
           />
 
           <ToolCard
+            title="Backup database"
+            description="Xem danh sách backup, chạy backup ngay, tải xuống, xóa bản cũ và cấu hình số bản cần giữ."
+            href="/dashboard/data-maintenance/backups"
+            icon={<Activity className="size-6" />}
+            tone="indigo"
+          />
+
+          <ToolCard
             title="Family Model nâng cao"
             description="Audit và repair missing marriage/child Family Model, duplicate parent/child và cấu trúc family bất thường."
             href="/dashboard/data-maintenance/family-model"

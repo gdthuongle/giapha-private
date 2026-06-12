@@ -29,7 +29,12 @@ export type AuditAction =
   | "permission.denied"
   | "home_assistant.token_created"
   | "home_assistant.token_revoked"
-  | "home_assistant.api_accessed";
+  | "home_assistant.api_accessed"
+  | "backup.created"
+  | "backup.deleted"
+  | "backup.cleanup"
+  | "backup.failed"
+  | "backup.retention_updated";
 
 export type AuditEntityType =
   | "user"
@@ -41,7 +46,8 @@ export type AuditEntityType =
   | "data_maintenance"
   | "account"
   | "system"
-  | "home_assistant_token";
+  | "home_assistant_token"
+  | "backup";
 
 export type AuditSeverity = "info" | "warning" | "danger";
 

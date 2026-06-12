@@ -512,7 +512,7 @@ export default function MemberForm({
     const { error: linkError } = await supabase.from("person_events").insert({
       person_id: personId,
       event_id: eventRow.id,
-      role: "deceased",
+      role: "principal",
     });
 
     if (linkError) {

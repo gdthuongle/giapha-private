@@ -94,7 +94,7 @@ function toDbPayload(input: PlaceInput) {
   };
 }
 
-export function buildPlaceAddress(place: {
+function buildPlaceAddress(place: {
   name?: string | null;
   province?: string | null;
   commune?: string | null;
@@ -111,7 +111,7 @@ export function buildPlaceAddress(place: {
     .join(", ");
 }
 
-export function buildGoogleMapsSearchUrl(place: {
+function buildGoogleMapsSearchUrl(place: {
   name?: string | null;
   province?: string | null;
   commune?: string | null;
@@ -132,7 +132,7 @@ export function buildGoogleMapsSearchUrl(place: {
   return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}`;
 }
 
-export function buildGoogleMapsDirectionsUrl(place: {
+function buildGoogleMapsDirectionsUrl(place: {
   name?: string | null;
   province?: string | null;
   commune?: string | null;

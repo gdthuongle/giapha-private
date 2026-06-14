@@ -250,3 +250,52 @@ it("exports marriage and divorce family events to GEDCOM MARR and DIV", () => {
   expect(out).toContain("1 DIV");
   expect(out).toContain("2 DATE 06 JUN 2026");
 });
+
+describe("GEDCOM Event Model regression", () => {
+  it("does not export death_anniversary as DEAT", () => {
+    const result = exportToGedcomWithWarnings({
+      persons: [
+        {
+          id: "p1",
+          full_name: "Nguyễn Văn A",
+          gender: "male",
+          is_deceased: true,
+          birth_year: null,
+          birth_month: null,
+          birth_day: null,
+          death_year: null,
+          death_month: null,
+          death_day: null,
+        },
+      ],
+      relationships: [],
+      events: [
+        {
+          id: "e_gio",
+          type: "death_anniversary",
+          title: "Ngày giỗ",
+          start_date: "2026-03-10",
+          date_precision: "day",
+          canonical_calendar: "lunar",
+          lunar_day: 10,
+          lunar_month: 3,
+          lunar_year: null,
+          legacy_person_id: "p1",
+          deleted_at: null,
+        },
+      ],
+      person_events: [
+        {
+          person_id: "p1",
+          event_id: "e_gio",
+          role: "principal",
+        },
+      ],
+    } as any);
+
+    expect(result.content).toContain("1 DEAT Y");
+    expect(result.content).not.toContain("2 DATE 10 MAR 2026");
+    expect(result.content).not.toContain("_GIAPHA_LUNAR");
+  });
+});
+

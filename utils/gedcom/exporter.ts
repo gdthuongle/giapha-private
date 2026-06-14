@@ -21,6 +21,35 @@ export type GedcomExportOptions = {
   nameFormat?: GedcomNameFormat;
 };
 
+type GedcomSource = {
+  id: string;
+  title: string;
+  source_type?: string | null;
+  author?: string | null;
+  repository?: string | null;
+  url?: string | null;
+  note?: string | null;
+  deleted_at?: string | null;
+};
+
+type GedcomPersonSourceLink = {
+  id?: string;
+  person_id: string;
+  source_id: string;
+  citation_text?: string | null;
+  note?: string | null;
+  deleted_at?: string | null;
+};
+
+type GedcomEventSourceLink = {
+  id?: string;
+  event_id: string;
+  source_id: string;
+  citation_text?: string | null;
+  note?: string | null;
+  deleted_at?: string | null;
+};
+
 type ExportData = {
   persons: GedcomPerson[];
   relationships: GedcomRelationship[];
@@ -31,6 +60,10 @@ type ExportData = {
   family_children?: GedcomFamilyChild[];
   events?: GedcomEvent[];
   person_events?: GedcomPersonEvent[];
+
+  sources?: GedcomSource[];
+  person_source_links?: GedcomPersonSourceLink[];
+  event_source_links?: GedcomEventSourceLink[];
 };
 
 type ExportFamily = {
@@ -63,6 +96,7 @@ export function exportToGedcomWithWarnings(data: ExportData, options?: GedcomExp
   const personNames = data.person_names ?? [];
   const events = (data.events ?? []).filter((event) => !event.deleted_at);
   const personEvents = data.person_events ?? [];
+  const sourceContext = buildSourceContext(data);
 
   w.addRaw("0 HEAD");
   w.addRaw("1 GEDC");
@@ -170,6 +204,12 @@ export function exportToGedcomWithWarnings(data: ExportData, options?: GedcomExp
       w.addRaw(`1 FAMS @${famId}@`);
     }
 
+    writeSourceCitations(
+      w,
+      1,
+      sourceContext.personSourcesByPersonId.get(person.id) ?? [],
+    );
+
     if (person.note) w.add(1, "NOTE", person.note);
   }
 
@@ -261,6 +301,93 @@ function getAlternatePersonNames(
   return names
     .filter((name) => name.person_id === personId && !name.is_primary)
     .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
+}
+
+type SourceCitation = {
+  title: string;
+  citationText?: string | null;
+  note?: string | null;
+  sourceType?: string | null;
+  author?: string | null;
+  repository?: string | null;
+  url?: string | null;
+};
+
+function buildSourceContext(data: ExportData): {
+  personSourcesByPersonId: Map<string, SourceCitation[]>;
+  eventSourcesByEventId: Map<string, SourceCitation[]>;
+} {
+  const activeSources = (data.sources ?? []).filter((source) => !source.deleted_at);
+  const sourcesById = new Map(activeSources.map((source) => [source.id, source]));
+
+  const personSourcesByPersonId = new Map<string, SourceCitation[]>();
+  for (const link of (data.person_source_links ?? []).filter((row) => !row.deleted_at)) {
+    const source = sourcesById.get(link.source_id);
+    if (!source) continue;
+
+    const citations = personSourcesByPersonId.get(link.person_id) ?? [];
+    citations.push(makeSourceCitation(source, link.citation_text, link.note));
+    personSourcesByPersonId.set(link.person_id, citations);
+  }
+
+  const eventSourcesByEventId = new Map<string, SourceCitation[]>();
+  for (const link of (data.event_source_links ?? []).filter((row) => !row.deleted_at)) {
+    const source = sourcesById.get(link.source_id);
+    if (!source) continue;
+
+    const citations = eventSourcesByEventId.get(link.event_id) ?? [];
+    citations.push(makeSourceCitation(source, link.citation_text, link.note));
+    eventSourcesByEventId.set(link.event_id, citations);
+  }
+
+  return {
+    personSourcesByPersonId,
+    eventSourcesByEventId,
+  };
+}
+
+function makeSourceCitation(
+  source: GedcomSource,
+  citationText?: string | null,
+  linkNote?: string | null,
+): SourceCitation {
+  return {
+    title: source.title,
+    citationText,
+    note: linkNote ?? source.note ?? null,
+    sourceType: source.source_type ?? null,
+    author: source.author ?? null,
+    repository: source.repository ?? null,
+    url: source.url ?? null,
+  };
+}
+
+function writeSourceCitations(
+  w: GedcomWriter,
+  level: number,
+  citations: SourceCitation[],
+) {
+  for (const citation of citations) {
+    const title = citation.title?.trim();
+    if (!title) continue;
+
+    w.add(level, "SOUR", title);
+
+    const noteParts = [
+      citation.citationText,
+      citation.note,
+      citation.author ? `Tác giả/người cung cấp: ${citation.author}` : null,
+      citation.repository ? `Nơi lưu: ${citation.repository}` : null,
+      citation.url ? `URL: ${citation.url}` : null,
+      citation.sourceType ? `Loại nguồn: ${citation.sourceType}` : null,
+    ]
+      .map((part) => part?.trim())
+      .filter(Boolean);
+
+    if (noteParts.length > 0) {
+      w.add(level + 1, "NOTE", noteParts.join(" | "));
+    }
+  }
 }
 
 function buildPersonEventMap(input: {

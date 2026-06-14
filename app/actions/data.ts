@@ -79,6 +79,7 @@ interface BackupPayload {
   family_children?: unknown[];
   events?: unknown[];
   person_events?: unknown[];
+  places?: unknown[];
 
   // v5 export-only fields for Source/Citation Model.
   sources?: unknown[];
@@ -245,7 +246,17 @@ export async function exportData(
       error: "Lỗi tải dữ liệu events: " + eventsError.message,
     };
   }
+  const { data: allPlaces, error: placesError } = await supabase
+    .from("places")
+    .select("*")
+    .is("deleted_at", null)
+    .order("name", { ascending: true });
 
+  if (placesError) {
+    return {
+      error: "Lỗi tải dữ liệu places: " + placesError.message,
+    };
+  }
   const { data: allPersonEvents, error: personEventsError } = await supabase
     .from("person_events")
     .select("*");
@@ -422,6 +433,7 @@ export async function exportData(
     family_children: exportFamilyChildren,
     events: exportEvents,
     person_events: exportPersonEvents,
+    places: allPlaces ?? [],
     sources: exportSources,
     person_source_links: exportPersonSourceLinks,
     event_source_links: exportEventSourceLinks,

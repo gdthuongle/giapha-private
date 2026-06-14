@@ -81,6 +81,7 @@ export interface GedcomEvent {
   lunar_day?: number | null;
   lunar_is_leap_month?: boolean | null;
   place_text?: string | null;
+  place_id?: string | null;
   description?: string | null;
   family_id?: string | null;
   legacy_person_id?: string | null;

@@ -21,6 +21,22 @@ export type GedcomExportOptions = {
   nameFormat?: GedcomNameFormat;
 };
 
+type GedcomPlace = {
+  id: string;
+  name: string;
+  province?: string | null;
+  commune?: string | null;
+  address_detail?: string | null;
+  old_province?: string | null;
+  old_district?: string | null;
+  old_commune?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  google_maps_url?: string | null;
+  note?: string | null;
+  deleted_at?: string | null;
+};
+
 type GedcomSource = {
   id: string;
   title: string;
@@ -60,6 +76,7 @@ type ExportData = {
   family_children?: GedcomFamilyChild[];
   events?: GedcomEvent[];
   person_events?: GedcomPersonEvent[];
+  places?: GedcomPlace[];
 
   sources?: GedcomSource[];
   person_source_links?: GedcomPersonSourceLink[];
@@ -97,6 +114,7 @@ export function exportToGedcomWithWarnings(data: ExportData, options?: GedcomExp
   const events = (data.events ?? []).filter((event) => !event.deleted_at);
   const personEvents = data.person_events ?? [];
   const sourceContext = buildSourceContext(data);
+  const placeContext = buildPlaceContext(data);
 
   w.addRaw("0 HEAD");
   w.addRaw("1 GEDC");
@@ -187,6 +205,7 @@ export function exportToGedcomWithWarnings(data: ExportData, options?: GedcomExp
       bundle.birthEvents[0],
       warnings,
       sourceContext.eventSourcesByEventId.get(bundle.birthEvents[0]?.id ?? "") ?? [],
+      placeContext,
     );
     writeDeathEvent(
       w,
@@ -194,6 +213,7 @@ export function exportToGedcomWithWarnings(data: ExportData, options?: GedcomExp
       bundle.deathEvents[0],
       warnings,
       sourceContext.eventSourcesByEventId.get(bundle.deathEvents[0]?.id ?? "") ?? [],
+      placeContext,
     );
 
     if (bundle.birthEvents.length > 1) {
@@ -249,7 +269,7 @@ export function exportToGedcomWithWarnings(data: ExportData, options?: GedcomExp
 
     if (fam.marriageEvent) {
       w.addRaw("1 MARR");
-      writeEventDatePlace(w, 2, fam.marriageEvent, warnings);
+      writeEventDatePlace(w, 2, fam.marriageEvent, warnings, placeContext);
     } else if (
       fam.status &&
       fam.status !== "divorced" &&
@@ -265,7 +285,7 @@ export function exportToGedcomWithWarnings(data: ExportData, options?: GedcomExp
     ) {
       w.addRaw("1 DIV");
       if (fam.divorceEvent) {
-        writeEventDatePlace(w, 2, fam.divorceEvent, warnings);
+        writeEventDatePlace(w, 2, fam.divorceEvent, warnings, placeContext);
         writeSourceCitations(
           w,
           2,
@@ -475,11 +495,12 @@ function writeBirthEvent(
   person: GedcomPerson,
   event: GedcomEvent | undefined,
   warnings: string[],
-  sourceCitations: SourceCitation[] = [],
+  sourceCitations: SourceCitation[],
+  placeContext: PlaceContext,
 ) {
   if (event) {
     w.addRaw("1 BIRT");
-    writeEventDatePlace(w, 2, event, warnings);
+    writeEventDatePlace(w, 2, event, warnings, placeContext);
     writeSourceCitations(w, 2, sourceCitations);
     return;
   }
@@ -501,11 +522,12 @@ function writeDeathEvent(
   person: GedcomPerson,
   event: GedcomEvent | undefined,
   warnings: string[],
-  sourceCitations: SourceCitation[] = [],
+  sourceCitations: SourceCitation[],
+  placeContext: PlaceContext,
 ) {
   if (event) {
     w.addRaw("1 DEAT");
-    writeEventDatePlace(w, 2, event, warnings);
+    writeEventDatePlace(w, 2, event, warnings, placeContext);
     writeLunarEvent(w, 2, event);
     writeSourceCitations(w, 2, sourceCitations);
     return;
@@ -542,17 +564,61 @@ function writeDeathEvent(
     }
   }
 }
+type PlaceContext = {
+  placesById: Map<string, GedcomPlace>;
+};
+
+function buildPlaceContext(data: ExportData): PlaceContext {
+  const placesById = new Map<string, GedcomPlace>();
+
+  for (const place of data.places ?? []) {
+    if (!place.id || place.deleted_at) continue;
+    placesById.set(place.id, place);
+  }
+
+  return { placesById };
+}
+
+function cleanGedcomPlacePart(value?: string | null) {
+  const text = value?.trim() ?? "";
+  return text.length > 0 ? text : null;
+}
+
+function formatGedcomPlace(place: GedcomPlace) {
+  const parts = [
+    cleanGedcomPlacePart(place.address_detail),
+    cleanGedcomPlacePart(place.commune),
+    cleanGedcomPlacePart(place.province),
+    "Việt Nam",
+  ].filter(Boolean);
+
+  return parts.join(", ");
+}
+
+function getEventPlaceText(event: GedcomEvent, placeContext: PlaceContext) {
+  if (event.place_id) {
+    const place = placeContext.placesById.get(event.place_id);
+    if (place) {
+      const formatted = formatGedcomPlace(place);
+      if (formatted) return formatted;
+    }
+  }
+
+  return cleanGedcomPlacePart(event.place_text);
+}
 
 function writeEventDatePlace(
   w: GedcomWriter,
   level: number,
   event: GedcomEvent,
   warnings: string[],
+  placeContext: PlaceContext,
 ) {
   const gedcomDate = formatGedcomDateFromEvent(event, warnings);
   if (gedcomDate) w.add(level, "DATE", gedcomDate);
 
-  if (event.place_text) w.add(level, "PLAC", event.place_text);
+  const placeText = getEventPlaceText(event, placeContext);
+  if (placeText) w.add(level, "PLAC", placeText);
   if (event.description) w.add(level, "NOTE", event.description);
 }
 

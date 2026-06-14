@@ -135,8 +135,13 @@ async function countMissingSources(supabase: Awaited<ReturnType<typeof getSupaba
 export default async function DataMaintenancePage() {
   const supabase = await getSupabase();
 
-  const [unknownRes, missingLinksRes, emptyFamiliesRes, brokenPersonEventsRes] =
-    await Promise.all([
+  const [
+    unknownRes,
+    missingLinksRes,
+    emptyFamiliesRes,
+    brokenPersonEventsRes,
+    missingSourcesRes,
+  ] = await Promise.all([
       supabase
         .from("persons")
         .select("*", { count: "exact", head: true })
@@ -148,6 +153,7 @@ export default async function DataMaintenancePage() {
       supabase.rpc("count_active_empty_families"),
 
       countBrokenPersonEvents(supabase),
+      countMissingSources(supabase),
     ]);
 
   const unknownCount = unknownRes.count ?? 0;
@@ -156,6 +162,7 @@ export default async function DataMaintenancePage() {
   const emptyFamiliesCount =
     typeof emptyFamiliesRes.data?.count === "number" ? emptyFamiliesRes.data.count : 0;
   const brokenPersonEventsCount = brokenPersonEventsRes.count;
+  const missingSourcesCount = missingSourcesRes.count;
 
   return (
     <div className="flex-1 w-full relative flex flex-col pb-12">

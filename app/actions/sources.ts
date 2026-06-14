@@ -349,3 +349,150 @@ export async function updatePersonSourceLink(input: UpdatePersonSourceLinkInput)
 
   return { ok: true as const };
 }
+
+export async function softDeleteSource(sourceId: string) {
+  const supabase = await getSupabase();
+
+  const cleanSourceId = cleanText(sourceId);
+
+  if (!cleanSourceId) {
+    return { ok: false as const, error: "Thiếu sourceId." };
+  }
+
+  const { error } = await supabase.rpc("soft_delete_source_cascade", {
+    input_source_id: cleanSourceId,
+  });
+
+  if (error) {
+    return { ok: false as const, error: error.message };
+  }
+
+  revalidatePath("/dashboard/members");
+
+  return { ok: true as const };
+}
+
+export type ExistingEventSourceLinkInput = {
+  eventId: string;
+  sourceId: string;
+  citationText?: string;
+  note?: string;
+};
+
+export async function linkExistingEventSource(input: ExistingEventSourceLinkInput) {
+  const supabase = await getSupabase();
+
+  const eventId = cleanText(input.eventId);
+  const sourceId = cleanText(input.sourceId);
+
+  if (!eventId) {
+    return { ok: false as const, error: "Thiếu eventId." };
+  }
+
+  if (!sourceId) {
+    return { ok: false as const, error: "Chưa chọn nguồn." };
+  }
+
+  const {
+    data: { user },
+    error: userError,
+  } = await supabase.auth.getUser();
+
+  if (userError) {
+    return { ok: false as const, error: userError.message };
+  }
+
+  const { error } = await supabase.from("event_source_links").insert({
+    event_id: eventId,
+    source_id: sourceId,
+    citation_text: cleanText(input.citationText),
+    note: cleanText(input.note),
+    created_by: user?.id ?? null,
+  });
+
+  if (error) {
+    if (error.code === "23505") {
+      return { ok: false as const, error: "Nguồn này đã được gắn cho sự kiện này." };
+    }
+
+    return { ok: false as const, error: error.message };
+  }
+
+  revalidatePath("/dashboard/members");
+
+  return { ok: true as const };
+}
+
+export type UpdateEventSourceLinkInput = {
+  eventId: string;
+  linkId: string;
+  sourceId: string;
+  title: string;
+  sourceType: SourceType;
+  author?: string;
+  repository?: string;
+  url?: string;
+  sourceNote?: string;
+  citationText?: string;
+  linkNote?: string;
+};
+
+export async function updateEventSourceLink(input: UpdateEventSourceLinkInput) {
+  const supabase = await getSupabase();
+
+  const eventId = cleanText(input.eventId);
+  const linkId = cleanText(input.linkId);
+  const sourceId = cleanText(input.sourceId);
+  const title = cleanText(input.title);
+
+  if (!eventId) {
+    return { ok: false as const, error: "Thiếu eventId." };
+  }
+
+  if (!linkId) {
+    return { ok: false as const, error: "Thiếu linkId." };
+  }
+
+  if (!sourceId) {
+    return { ok: false as const, error: "Thiếu sourceId." };
+  }
+
+  if (!title) {
+    return { ok: false as const, error: "Tên nguồn không được để trống." };
+  }
+
+  const { error: sourceError } = await supabase
+    .from("sources")
+    .update({
+      title,
+      source_type: input.sourceType || "other",
+      author: cleanText(input.author),
+      repository: cleanText(input.repository),
+      url: cleanText(input.url),
+      note: cleanText(input.sourceNote),
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", sourceId);
+
+  if (sourceError) {
+    return { ok: false as const, error: sourceError.message };
+  }
+
+  const { error: linkError } = await supabase
+    .from("event_source_links")
+    .update({
+      citation_text: cleanText(input.citationText),
+      note: cleanText(input.linkNote),
+    })
+    .eq("id", linkId)
+    .eq("event_id", eventId)
+    .eq("source_id", sourceId);
+
+  if (linkError) {
+    return { ok: false as const, error: linkError.message };
+  }
+
+  revalidatePath("/dashboard/members");
+
+  return { ok: true as const };
+}

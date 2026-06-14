@@ -169,6 +169,14 @@ export default async function DataMaintenancePage() {
           />
 
           <ToolCard
+            title="Missing sources"
+            description="Kiểm tra người và sự kiện quan trọng chưa có nguồn xác minh."
+            href="/dashboard/data-maintenance/missing-sources"
+            icon={<DatabaseZap className="size-6" />}
+            tone="amber"
+          />
+
+          <ToolCard
             title="Events missing links"
             description="Tìm và repair birth/death events thiếu person_events link."
             href="/dashboard/data-maintenance/events-missing-links"

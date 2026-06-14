@@ -564,15 +564,22 @@ export default function RelationshipManager({
         return;
       }
 
-      const { data } = await supabase
-        .from("persons_active")
-        .select("*")
-        .ilike("full_name", `%${searchTerm}%`)
-        .neq("id", personId) // Exclude self
-        .limit(5);
+      const { data, error } = await supabase.rpc("search_persons_unaccent", {
+        search_text: searchTerm,
+        exclude_person_id: personId,
+        limit_count: 5,
+      });
+
+      if (error) {
+        console.error("Error searching people:", error);
+        setSearchResults([]);
+        return;
+      }
 
       if (data) {
-        setSearchResults(data.filter((candidate) => isAllowedPerson(candidate.id)));
+        setSearchResults(
+          data.filter((candidate: { id: string }) => isAllowedPerson(candidate.id)),
+        );
       }
     };
 

@@ -496,3 +496,50 @@ export async function updateEventSourceLink(input: UpdateEventSourceLinkInput) {
 
   return { ok: true as const };
 }
+
+export type UpdateSourceInput = {
+  sourceId: string;
+  title: string;
+  sourceType: SourceType;
+  author?: string;
+  repository?: string;
+  url?: string;
+  note?: string;
+};
+
+export async function updateSource(input: UpdateSourceInput) {
+  const supabase = await getSupabase();
+
+  const sourceId = cleanText(input.sourceId);
+  const title = cleanText(input.title);
+
+  if (!sourceId) {
+    return { ok: false as const, error: "Thiếu sourceId." };
+  }
+
+  if (!title) {
+    return { ok: false as const, error: "Tên nguồn không được để trống." };
+  }
+
+  const { error } = await supabase
+    .from("sources")
+    .update({
+      title,
+      source_type: input.sourceType || "other",
+      author: cleanText(input.author),
+      repository: cleanText(input.repository),
+      url: cleanText(input.url),
+      note: cleanText(input.note),
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", sourceId);
+
+  if (error) {
+    return { ok: false as const, error: error.message };
+  }
+
+  revalidatePath("/dashboard/members");
+  revalidatePath("/dashboard/sources");
+
+  return { ok: true as const };
+}

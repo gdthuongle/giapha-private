@@ -97,6 +97,7 @@ type ExportFamily = {
 type PersonEventBundle = {
   birthEvents: GedcomEvent[];
   deathEvents: GedcomEvent[];
+  residenceEvents: GedcomEvent[];
 };
 
 export function exportToGedcom(data: ExportData, options?: GedcomExportOptions): string {
@@ -197,6 +198,7 @@ export function exportToGedcomWithWarnings(data: ExportData, options?: GedcomExp
     const bundle = personEventMap.get(person.id) ?? {
       birthEvents: [],
       deathEvents: [],
+      residenceEvents: [],
     };
 
     writeBirthEvent(
@@ -215,6 +217,16 @@ export function exportToGedcomWithWarnings(data: ExportData, options?: GedcomExp
       sourceContext.eventSourcesByEventId.get(bundle.deathEvents[0]?.id ?? "") ?? [],
       placeContext,
     );
+
+    for (const residenceEvent of bundle.residenceEvents) {
+      writeResidenceEvent(
+        w,
+        residenceEvent,
+        warnings,
+        sourceContext.eventSourcesByEventId.get(residenceEvent.id) ?? [],
+        placeContext,
+      );
+    }
 
     if (bundle.birthEvents.length > 1) {
       warnings.push(
@@ -445,15 +457,21 @@ function buildPersonEventMap(input: {
     const event = eventsById.get(pe.event_id);
     if (!event) continue;
 
-    if (event.type !== "birth" && event.type !== "death") continue;
+    if (
+      event.type !== "birth" &&
+      event.type !== "death" &&
+      event.type !== "residence"
+    ) continue;
 
     const bundle = out.get(pe.person_id) ?? {
       birthEvents: [],
       deathEvents: [],
+      residenceEvents: [],
     };
 
     if (event.type === "birth") bundle.birthEvents.push(event);
     if (event.type === "death") bundle.deathEvents.push(event);
+    if (event.type === "residence") bundle.residenceEvents.push(event);
 
     out.set(pe.person_id, bundle);
   }
@@ -461,14 +479,24 @@ function buildPersonEventMap(input: {
   for (const event of input.events) {
     if (!event.legacy_person_id) continue;
     if (!personIds.has(event.legacy_person_id)) continue;
-    if (event.type !== "birth" && event.type !== "death") continue;
+    if (
+      event.type !== "birth" &&
+      event.type !== "death" &&
+      event.type !== "residence"
+    ) continue;
 
     const bundle = out.get(event.legacy_person_id) ?? {
       birthEvents: [],
       deathEvents: [],
+      residenceEvents: [],
     };
 
-    const target = event.type === "birth" ? bundle.birthEvents : bundle.deathEvents;
+    const target =
+      event.type === "birth"
+        ? bundle.birthEvents
+        : event.type === "death"
+          ? bundle.deathEvents
+          : bundle.residenceEvents;
     if (!target.some((existing) => existing.id === event.id)) {
       target.push(event);
     }
@@ -479,6 +507,7 @@ function buildPersonEventMap(input: {
   for (const bundle of out.values()) {
     bundle.birthEvents.sort(compareEvents);
     bundle.deathEvents.sort(compareEvents);
+    bundle.residenceEvents.sort(compareEvents);
   }
 
   return out;
@@ -488,6 +517,18 @@ function compareEvents(a: GedcomEvent, b: GedcomEvent): number {
   const ad = a.sort_date ?? a.start_date ?? "";
   const bd = b.sort_date ?? b.start_date ?? "";
   return ad.localeCompare(bd);
+}
+
+function writeResidenceEvent(
+  w: GedcomWriter,
+  event: GedcomEvent,
+  warnings: string[],
+  sourceCitations: SourceCitation[] = [],
+  placeContext: PlaceContext,
+) {
+  w.addRaw("1 RESI");
+  writeEventDatePlace(w, 2, event, warnings, placeContext);
+  writeSourceCitations(w, 2, sourceCitations);
 }
 
 function writeBirthEvent(

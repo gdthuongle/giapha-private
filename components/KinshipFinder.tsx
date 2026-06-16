@@ -230,44 +230,54 @@ function PersonSelector({
 // ── Kinship reference table data ──────────────────────────────────────────────
 const KINSHIP_TERMS = [
   {
-    relation: "Bố / Mẹ",
-    desc: "1 bậc trên (dòng trực hệ)",
-    example: "Bố, ba, má...",
+    relation: "Ba / Má",
+    desc: "1 bậc trên theo miền Nam",
+    example: "Ba, tía, cha; má, mẹ",
   },
   {
-    relation: "Ông / Bà",
-    desc: "2 bậc trên (dòng trực hệ)",
-    example: "Ông nội, bà ngoại...",
+    relation: "Ông / Bà nội ngoại",
+    desc: "2 bậc trên, phân theo đường cha hoặc đường mẹ",
+    example: "Ông nội, bà nội, ông ngoại, bà ngoại",
   },
   {
-    relation: "Cụ / Kỵ / Sơ...",
-    desc: "3 bậc trên trở lên",
-    example: "Cụ cố, cụ kỵ...",
+    relation: "Ông cố / Bà cố / Ông sơ / Bà sơ",
+    desc: "3-4 bậc trên theo cách gọi miền Nam",
+    example: "Ông cố bên nội, bà sơ bên ngoại",
   },
   {
-    relation: "Con / Cháu / Chắt...",
-    desc: "Các bậc dưới trực hệ",
-    example: "Con, cháu, chắt, chít...",
+    relation: "Con / Cháu nội ngoại / Chắt / Chút / Chít",
+    desc: "Các bậc dưới trực hệ, cháu phân theo con trai hoặc con gái",
+    example: "Con trai sinh con = cháu nội; con gái sinh con = cháu ngoại",
   },
   {
     relation: "Anh / Chị / Em họ",
-    desc: "Cùng thế hệ, khác nhánh",
-    example: "Dựa vào thứ bậc của nhánh bố/mẹ",
+    desc: "Cùng thế hệ, khác nhánh; vai vế ưu tiên nhánh ông/bà rồi cha/mẹ",
+    example: "Cha/mẹ ai lớn hơn thì con nhánh đó là anh/chị họ",
   },
   {
     relation: "Bác / Chú / Cô",
-    desc: "Anh/chị/em của bố (Bên Nội)",
-    example: "Bác (anh), Chú (em trai), Cô (chị em gái)",
+    desc: "Anh/chị/em của ba hoặc nhánh bên nội",
+    example: "Anh trai của ba = bác; em trai của ba = chú; chị/em gái của ba = cô",
   },
   {
     relation: "Cậu / Dì",
-    desc: "Anh/chị/em của mẹ (Bên Ngoại)",
-    example: "Cậu (anh em trai), Dì (chị em gái)",
+    desc: "Anh/chị/em của má hoặc nhánh bên ngoại",
+    example: "Anh/em trai của má = cậu; chị/em gái của má = dì",
   },
   {
     relation: "Thím / Mợ / Dượng",
     desc: "Vợ/chồng của chú, cậu, cô, dì",
-    example: "Thím (vợ chú), Mợ (vợ cậu), Dượng (chồng cô/dì)",
+    example: "Thím = vợ chú; mợ = vợ cậu; dượng = chồng cô/dì",
+  },
+  {
+    relation: "Dâu / Rể",
+    desc: "Vợ/chồng của người huyết thống trong nhánh",
+    example: "Con dâu, con rể, cháu dâu, cháu rể, chị dâu, anh rể",
+  },
+  {
+    relation: "Sui gia",
+    desc: "Quan hệ giữa cha mẹ hai bên của một cặp vợ chồng",
+    example: "Ông sui, bà sui, bên sui, nhà sui",
   },
 ];
 
@@ -278,21 +288,15 @@ type RegionalTerm = {
 };
 
 const REGIONAL_TERMS: RegionalTerm[] = [
-  { reference: "Bố", other: "ba, tía, thầy, bọ" },
-  { reference: "Mẹ", other: "má, mạ, u, bu, bầm" },
-  { reference: "Ông (nội / ngoại)", other: "ôn" },
-  { reference: "Bà (nội / ngoại)", other: "mệ" },
-  { reference: "Anh trai", other: "eng, anh hai" },
-  { reference: "Chị gái", other: "chị hai" },
-  { reference: "Em", other: "mi, út" },
-  { reference: "Bác gái (vợ bác)", other: "bác" },
-  { reference: "Cô (em gái bố)", other: "o" },
-  { reference: "Thím (vợ chú)", other: "mự" },
-  { reference: "Con rể", other: "rể" },
-  { reference: "Con dâu", other: "dâu" },
-  { reference: "Thông gia", other: "sui gia" },
+  { reference: "Cha", other: "miền Nam: ba, tía; miền Bắc: bố, thầy" },
+  { reference: "Mẹ", other: "miền Nam: má; miền Trung: mạ; miền Bắc: mẹ, u, bu" },
+  { reference: "Con đầu", other: "miền Nam: Hai; miền Bắc thường gọi Cả" },
+  { reference: "Thứ tự sinh", other: "Hai, Ba, Tư, Năm, Sáu, Bảy, Tám, Chín, Mười, Út" },
+  { reference: "Đời trên", other: "miền Nam ưu tiên ông cố/bà cố, ông sơ/bà sơ" },
+  { reference: "Bên nội", other: "bác, chú, cô, thím, dượng" },
+  { reference: "Bên ngoại", other: "cậu, dì, mợ, dượng" },
+  { reference: "Thông gia", other: "miền Nam thường gọi sui gia, ông sui, bà sui" },
 ];
-
 // ── Main component ────────────────────────────────────────────────────────────
 export default function KinshipFinder({ persons, relationships, restrictedNotice }: Props) {
   const router = useRouter();
@@ -609,7 +613,7 @@ export default function KinshipFinder({ persons, relationships, restrictedNotice
                     <li className="flex gap-2">
                       <span className="font-bold shrink-0">4.</span>
                       So sánh <strong>thứ bậc (seniority)</strong> giữa các
-                      nhanh từ tổ tiên chung để quyết định quan hệ
+                      nhánh từ tổ tiên chung để quyết định quan hệ
                       &quot;Anh/Em&quot; hoặc &quot;Bác/Chú&quot;.
                     </li>
                     <li className="flex gap-2">
@@ -639,8 +643,9 @@ export default function KinshipFinder({ persons, relationships, restrictedNotice
                     </li>
                     <li className="flex gap-2">
                       <span className="text-amber-400 shrink-0">•</span>
-                      <strong>Thứ tự sinh (Birth Order)</strong> là yếu tố then
-                      chốt để phân định thứ bậc Anh/Em trong dòng họ.
+                      <strong>Thứ tự sinh</strong> nên chuẩn miền Nam: con đầu là
+                      Hai, sau đó Ba, Tư, Năm...; hệ thống ưu tiên thứ tự sinh
+                      trước năm sinh khi xét vai vế.
                     </li>
                   </ul>
                 </div>

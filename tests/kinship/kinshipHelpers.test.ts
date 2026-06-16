@@ -61,7 +61,7 @@ describe("computeKinship", () => {
 
     const result = computeKinship(persons[0], persons[4], persons, relationships);
 
-    expect(result?.aCallsB).toBe("chị họ");
+    expect(result?.aCallsB).toBe("chị họ bên nội");
   });
 
   it("uses Vietnamese affinal terms for spouses of aunt/uncle/siblings/nephews", () => {
@@ -143,6 +143,76 @@ describe("computeKinship", () => {
     expect(computeKinship(persons[0], persons[4], persons, relationships)?.aCallsB).toBe("dượng");
     expect(computeKinship(persons[0], persons[6], persons, relationships)?.aCallsB).toBe("thím");
     expect(computeKinship(persons[0], persons[8], persons, relationships)?.aCallsB).toBe("em dâu");
+  });
+
+  it("uses branch birth order before birth year for same-generation cousins", () => {
+    const persons = [
+      person("root", "Người gốc", { gender: "male", birth_year: 1990 }),
+      person("father", "Ba người gốc", { gender: "male", birth_year: 1960, birth_order: 2 }),
+      person("grand", "Ông nội", { gender: "male" }),
+      person("uncle", "Bác Hai", { gender: "male", birth_year: 1975, birth_order: 1 }),
+      person("cousin", "Con bác Hai", { gender: "male", birth_year: 2005 }),
+    ];
+    const relationships = [
+      child("father", "root"),
+      child("grand", "father"),
+      child("grand", "uncle"),
+      child("uncle", "cousin"),
+    ];
+
+    const result = computeKinship(persons[0], persons[4], persons, relationships);
+
+    expect(result?.aCallsB).toBe("anh họ bên nội");
+  });
+
+  it("uses grandparent branch seniority for same-generation distant cousins", () => {
+    const persons = [
+      person("root", "Người gốc", { gender: "female" }),
+      person("father", "Ba", { gender: "male" }),
+      person("grandfather", "Ông nội người gốc", { gender: "male", birth_order: 2 }),
+      person("great", "Ông cố", { gender: "male" }),
+      person("olderGrandUncle", "Ông bác nội", { gender: "male", birth_order: 1 }),
+      person("targetParent", "Con ông bác nội", { gender: "male" }),
+      person("target", "Cháu nhánh ông bác", { gender: "female" }),
+    ];
+    const relationships = [
+      child("father", "root"),
+      child("grandfather", "father"),
+      child("great", "grandfather"),
+      child("great", "olderGrandUncle"),
+      child("olderGrandUncle", "targetParent"),
+      child("targetParent", "target"),
+    ];
+
+    const result = computeKinship(persons[0], persons[6], persons, relationships);
+
+    expect(result?.aCallsB).toBe("chị họ xa bên nội");
+  });
+
+  it("uses southern direct ancestor and grandchild terms", () => {
+    const persons = [
+      person("root", "Người gốc", { gender: "male" }),
+      person("mother", "Má", { gender: "female" }),
+      person("grandmother", "Bà ngoại", { gender: "female" }),
+      person("greatGrandmother", "Bà cố ngoại", { gender: "female" }),
+      person("son", "Con trai", { gender: "male" }),
+      person("grandson", "Cháu nội", { gender: "male" }),
+      person("daughter", "Con gái", { gender: "female" }),
+      person("maternalGranddaughter", "Cháu ngoại", { gender: "female" }),
+    ];
+    const relationships = [
+      child("mother", "root"),
+      child("grandmother", "mother"),
+      child("greatGrandmother", "grandmother"),
+      child("root", "son"),
+      child("son", "grandson"),
+      child("root", "daughter"),
+      child("daughter", "maternalGranddaughter"),
+    ];
+
+    expect(computeKinship(persons[0], persons[3], persons, relationships)?.aCallsB).toBe("bà cố bên ngoại");
+    expect(computeKinship(persons[0], persons[5], persons, relationships)?.aCallsB).toBe("cháu nội");
+    expect(computeKinship(persons[0], persons[7], persons, relationships)?.aCallsB).toBe("cháu ngoại");
   });
 
   it("recognizes sui gia and spouse family terms", () => {

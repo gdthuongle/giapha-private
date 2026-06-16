@@ -215,15 +215,15 @@ function generationTerm(input: InLawAddressInput): string {
   }
 
   if (input.generation <= -4) {
-    if (person.gender === "female") return `bà kỵ ${suffix}`;
-    if (person.gender === "male") return `ông kỵ ${suffix}`;
-    return `kỵ ${suffix}`;
+    if (person.gender === "female") return `bà sơ ${suffix}`;
+    if (person.gender === "male") return `ông sơ ${suffix}`;
+    return `ông/bà sơ ${suffix}`;
   }
 
   if (input.generation === -3) {
-    if (person.gender === "female") return `bà cụ ${suffix}`;
-    if (person.gender === "male") return `ông cụ ${suffix}`;
-    return `cụ ${suffix}`;
+    if (person.gender === "female") return `bà cố ${suffix}`;
+    if (person.gender === "male") return `ông cố ${suffix}`;
+    return `ông/bà cố ${suffix}`;
   }
 
   if (input.generation === -2) {

@@ -236,8 +236,8 @@ function generationLabel(generation: number): string {
   if (generation < 0) {
     if (generation === -1) return "-1 · Cha mẹ / cùng hàng cha mẹ";
     if (generation === -2) return "-2 · Ông bà";
-    if (generation === -3) return "-3 · Cụ";
-    if (generation === -4) return "-4 · Kỵ";
+    if (generation === -3) return "-3 · Ông bà cố";
+    if (generation === -4) return "-4 · Ông bà sơ";
     return `${generation} · Tổ đời ${Math.abs(generation)}`;
   }
 
@@ -265,8 +265,8 @@ function branchAncestorLabel(input: {
     return person.gender === "female" ? `Bà ngoại${sideSuffix}` : `Ông ngoại${sideSuffix}`;
   }
 
-  if (generation === -3) return branch === "paternal" ? `Cụ bên nội${sideSuffix}` : `Cụ bên ngoại${sideSuffix}`;
-  if (generation === -4) return branch === "paternal" ? `Kỵ bên nội${sideSuffix}` : `Kỵ bên ngoại${sideSuffix}`;
+  if (generation === -3) return branch === "paternal" ? `Ông/bà cố bên nội${sideSuffix}` : `Ông/bà cố bên ngoại${sideSuffix}`;
+  if (generation === -4) return branch === "paternal" ? `Ông/bà sơ bên nội${sideSuffix}` : `Ông/bà sơ bên ngoại${sideSuffix}`;
 
   return branch === "paternal"
     ? `Tổ đời ${Math.abs(generation)} bên nội${sideSuffix}`

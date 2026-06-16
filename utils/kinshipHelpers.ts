@@ -34,8 +34,40 @@ interface PathNode {
   personIds: string[];
 }
 
+function southernBirthOrderLabel(order?: number | null): string | null {
+  if (order == null || !Number.isFinite(order) || order <= 0) return null;
+
+  const labels = [
+    "Hai",
+    "Ba",
+    "Tư",
+    "Năm",
+    "Sáu",
+    "Bảy",
+    "Tám",
+    "Chín",
+    "Mười",
+    "Mười Một",
+    "Mười Hai",
+    "Mười Ba",
+  ];
+
+  return labels[order - 1] ?? `thứ ${order + 1}`;
+}
+
 function personName(person?: KinshipPersonNode | null): string {
-  return person?.full_name || "người này";
+  if (!person) return "người này";
+  const order = southernBirthOrderLabel(person.birth_order);
+  return order ? `${person.full_name} (thứ ${order})` : person.full_name;
+}
+
+function lineageSideFromRootParent(rootParent?: KinshipPersonNode | null): "nội" | "ngoại" | null {
+  if (!rootParent) return null;
+  return rootParent.gender === "female" ? "ngoại" : "nội";
+}
+
+function appendLineageSide(term: string, side: "nội" | "ngoại" | null): string {
+  return side ? `${term} bên ${side}` : term;
 }
 
 function genderParentTerm(person?: KinshipPersonNode | null): string {
@@ -62,12 +94,15 @@ function siblingTerm(target?: KinshipPersonNode | null, reference?: KinshipPerso
 function isOlder(a?: KinshipPersonNode | null, b?: KinshipPersonNode | null): boolean | null {
   if (!a || !b) return null;
 
-  if (a.birth_year != null && b.birth_year != null && a.birth_year !== b.birth_year) {
-    return a.birth_year < b.birth_year;
-  }
-
+  // Vai vế gia phả ưu tiên thứ tự sinh trong cùng gia đình. Ngày/năm sinh chỉ là
+  // fallback khi chưa nhập thứ tự sinh. Điều này xử lý đúng trường hợp người nhỏ
+  // tuổi hơn nhưng thuộc nhánh bác/cậu/dì lớn hơn.
   if (a.birth_order != null && b.birth_order != null && a.birth_order !== b.birth_order) {
     return a.birth_order < b.birth_order;
+  }
+
+  if (a.birth_year != null && b.birth_year != null && a.birth_year !== b.birth_year) {
+    return a.birth_year < b.birth_year;
   }
 
   return null;
@@ -125,30 +160,45 @@ function directAncestorTerm(steps: Step[], people: KinshipPersonNode[]): string 
 
   const depth = steps.length;
   const firstParent = people[1];
-  const secondParent = people[2];
   const target = people[depth];
+  const side = lineageSideFromRootParent(firstParent);
 
   if (depth === 1) return genderParentTerm(target);
 
   if (depth === 2) {
-    const firstIsMother = firstParent?.gender === "female";
-    if (firstIsMother) return target?.gender === "female" ? "bà ngoại" : "ông ngoại";
+    if (side === "ngoại") return target?.gender === "female" ? "bà ngoại" : "ông ngoại";
     return target?.gender === "female" ? "bà nội" : "ông nội";
   }
 
-  if (depth === 3) return "cụ";
-  if (depth === 4) return "kỵ";
-  return `tổ đời trên ${depth}`;
+  if (depth === 3) {
+    const base = target?.gender === "female" ? "bà cố" : target?.gender === "male" ? "ông cố" : "ông/bà cố";
+    return appendLineageSide(base, side);
+  }
+
+  if (depth === 4) {
+    const base = target?.gender === "female" ? "bà sơ" : target?.gender === "male" ? "ông sơ" : "ông/bà sơ";
+    return appendLineageSide(base, side);
+  }
+
+  return appendLineageSide(`tổ đời trên ${depth}`, side);
 }
 
-function directDescendantTerm(steps: Step[], target?: KinshipPersonNode | null): string | null {
+function directDescendantTerm(steps: Step[], people: KinshipPersonNode[]): string | null {
   if (!steps.every((step) => step === "child")) return null;
 
   const depth = steps.length;
+  const firstChild = people[1];
+  const target = people[people.length - 1];
+
   if (depth === 1) return genderChildTerm(target);
-  if (depth === 2) return "cháu";
+  if (depth === 2) {
+    if (firstChild?.gender === "male") return "cháu nội";
+    if (firstChild?.gender === "female") return "cháu ngoại";
+    return "cháu";
+  }
   if (depth === 3) return "chắt";
   if (depth === 4) return "chút";
+  if (depth === 5) return "chít";
   return `hậu duệ đời ${depth}`;
 }
 
@@ -221,25 +271,29 @@ function sameGenerationCollateralTerm(input: {
   target?: KinshipPersonNode | null;
   rootBranch?: KinshipPersonNode | null;
   targetBranch?: KinshipPersonNode | null;
+  rootParent?: KinshipPersonNode | null;
+  degree?: number;
 }): string {
-  const { target, rootBranch, targetBranch } = input;
+  const { target, rootBranch, targetBranch, rootParent, degree = 1 } = input;
   const targetBranchOlder = isOlder(targetBranch, rootBranch);
+  const side = lineageSideFromRootParent(rootParent ?? rootBranch);
+  const cousinTerm = degree >= 2 ? "họ xa" : "họ";
 
   if (target?.gender === "male") {
-    if (targetBranchOlder === true) return "anh họ";
-    if (targetBranchOlder === false) return "em trai họ";
-    return "anh/em họ";
+    if (targetBranchOlder === true) return appendLineageSide(`anh ${cousinTerm}`, side);
+    if (targetBranchOlder === false) return appendLineageSide(`em trai ${cousinTerm}`, side);
+    return appendLineageSide(`anh/em ${cousinTerm}`, side);
   }
 
   if (target?.gender === "female") {
-    if (targetBranchOlder === true) return "chị họ";
-    if (targetBranchOlder === false) return "em gái họ";
-    return "chị/em họ";
+    if (targetBranchOlder === true) return appendLineageSide(`chị ${cousinTerm}`, side);
+    if (targetBranchOlder === false) return appendLineageSide(`em gái ${cousinTerm}`, side);
+    return appendLineageSide(`chị/em ${cousinTerm}`, side);
   }
 
-  if (targetBranchOlder === true) return "anh/chị họ";
-  if (targetBranchOlder === false) return "em họ";
-  return "anh/chị/em họ";
+  if (targetBranchOlder === true) return appendLineageSide(`anh/chị ${cousinTerm}`, side);
+  if (targetBranchOlder === false) return appendLineageSide(`em ${cousinTerm}`, side);
+  return appendLineageSide(`anh/chị/em ${cousinTerm}`, side);
 }
 
 function ancestorSiblingByDepthTerm(input: {
@@ -313,6 +367,8 @@ function genericCollateralTerm(steps: Step[], people: KinshipPersonNode[]): stri
       target,
       rootBranch: people[up - 1],
       targetBranch: people[up + 1],
+      rootParent,
+      degree: up - 1,
     });
   }
 
@@ -422,7 +478,7 @@ function termFromPath(steps: Step[], people: KinshipPersonNode[]): string {
   const ancestor = directAncestorTerm(steps, people);
   if (ancestor) return ancestor;
 
-  const descendant = directDescendantTerm(steps, target);
+  const descendant = directDescendantTerm(steps, people);
   if (descendant) return descendant;
 
   // sibling: up parent, down child.
@@ -463,6 +519,8 @@ function termFromPath(steps: Step[], people: KinshipPersonNode[]): string {
       target,
       rootBranch: people[1],
       targetBranch: people[3],
+      rootParent: people[1],
+      degree: 1,
     });
     return branchBased || childOfParentSiblingTerm({ target, parentSibling: people[3] });
   }

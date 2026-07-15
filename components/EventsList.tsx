@@ -431,12 +431,14 @@ function EventCard({
   onEditCustomEvent,
   onDeleteEventModel,
   deletingEventId,
+  canDelete,
 }: {
   event: ExtendedFamilyEvent;
   index: number;
   onEditCustomEvent: (e: ExtendedFamilyEvent) => void;
   onDeleteEventModel: (e: ExtendedFamilyEvent) => void;
   deletingEventId: string | null;
+  canDelete: boolean;
 }) {
   const isBirthday = event.type === "birthday";
   const isCustom = event.type === "custom_event";
@@ -456,7 +458,14 @@ function EventCard({
   const shouldShowEventMessage =
     (event.daysUntil >= 0 && event.daysUntil < 5) ||
     (event.type === "death_recent" && event.daysUntil >= -5);
-  const canDeleteEventModel = Boolean(event.eventModelId && event.eventModelRootPersonId);
+  // Ngày giỗ (death_anniversary) dùng UI giống ngày mất: không có nút xoá ở
+  // danh sách sự kiện. Các loại sự kiện khác chỉ cho phép xoá khi user có
+  // quyền tạo sự kiện (admin/editor) — trước đây thiếu kiểm tra này nên bất
+  // kỳ user nào cũng bấm xoá được.
+  const canDeleteEventModel =
+    !isMemorial &&
+    canDelete &&
+    Boolean(event.eventModelId && event.eventModelRootPersonId);
 
   const { setMemberModalId } = useMemberListView();
 
@@ -1322,6 +1331,7 @@ export default function EventsList({
               onEditCustomEvent={handleOpenEditModal}
               onDeleteEventModel={handleDeleteEventModel}
               deletingEventId={deletingEventId}
+              canDelete={canCreateEvent}
             />
           ))}
         </div>

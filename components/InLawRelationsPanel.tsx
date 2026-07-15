@@ -163,7 +163,6 @@ export default function InLawRelationsPanel({
   const [includeClan, setIncludeClan] = useState(false);
   const [hideDaughtersInLaw, setHideDaughtersInLaw] = useState(false);
   const [hideSonsInLaw, setHideSonsInLaw] = useState(false);
-  const [addressRegion, setAddressRegion] = useState<"south" | "north" | "neutral">("south");
 
   useEffect(() => {
     if (sortedPersons.length === 0) return;
@@ -213,10 +212,9 @@ export default function InLawRelationsPanel({
         includeClan,
         hideDaughtersInLaw,
         hideSonsInLaw,
-        addressRegion,
       },
     });
-  }, [rootPersonId, selectedSpouseId, generationsUp, generationsDown, persons, relationships, families, familyParents, familyChildren, includeClan, hideDaughtersInLaw, hideSonsInLaw, addressRegion]);
+  }, [rootPersonId, selectedSpouseId, generationsUp, generationsDown, persons, relationships, families, familyParents, familyChildren, includeClan, hideDaughtersInLaw, hideSonsInLaw]);
 
   useEffect(() => {
     if (graph.spouses.length === 0) {
@@ -322,22 +320,8 @@ export default function InLawRelationsPanel({
           </label>
         </div>
 
-        <div className="mt-4 grid gap-4 md:grid-cols-[1fr_auto] md:items-end">
-          <div>
-            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-stone-500">Tuỳ chọn hiển thị</p>
-          </div>
-          <label className="flex flex-col gap-1 text-sm">
-            <span className="font-semibold text-stone-700">Kiểu xưng hô</span>
-            <select
-              value={addressRegion}
-              onChange={(event) => setAddressRegion(event.target.value as "south" | "north" | "neutral")}
-              className="rounded-xl border border-stone-200 bg-white px-3 py-2 text-sm text-stone-900 shadow-sm outline-none focus:border-amber-400"
-            >
-              <option value="south">Miền Nam</option>
-              <option value="north">Miền Bắc</option>
-              <option value="neutral">Trung tính</option>
-            </select>
-          </label>
+        <div className="mt-4">
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-stone-500">Tuỳ chọn hiển thị</p>
         </div>
 
         <div className="mt-3 grid gap-2 md:grid-cols-3">

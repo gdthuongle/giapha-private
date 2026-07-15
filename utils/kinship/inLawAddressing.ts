@@ -1,8 +1,6 @@
 import type { Person } from "@/types";
 import type { InLawSide, LineageBranch } from "@/utils/tree/lineageComparison";
 
-export type KinshipAddressRegion = "south" | "north" | "neutral";
-
 export interface InLawAddressInput {
   person: Person;
   root: Person | null;
@@ -12,7 +10,6 @@ export interface InLawAddressInput {
   generation: number;
   relationLabel: string;
   isInLaw?: boolean;
-  region?: KinshipAddressRegion;
 }
 
 function clean(value: string): string {
@@ -23,16 +20,10 @@ function lower(value: string): string {
   return clean(value).toLocaleLowerCase("vi");
 }
 
-function parentTerm(gender: Person["gender"], region: KinshipAddressRegion): string {
-  if (gender === "female") {
-    if (region === "south") return "má";
-    if (region === "north") return "mẹ";
-    return "mẹ";
-  }
-
-  if (region === "south") return "ba";
-  if (region === "north") return "bố";
-  return "cha";
+function parentTerm(gender: Person["gender"]): string {
+  // Chốt: chỉ dùng 1 kiểu Nam Bộ cho cả 3 trang, không còn tuỳ chọn vùng miền.
+  if (gender === "female") return "má";
+  return "ba";
 }
 
 function sideInLawSuffix(input: InLawAddressInput): string {
@@ -50,7 +41,9 @@ function sideInLawSuffix(input: InLawAddressInput): string {
     return "bên vợ/chồng";
   }
 
-  return "trong gia đình chung";
+  // side === "center": không có khung 2 họ để so sánh (trang Nội ngoại, hoặc
+  // chính cặp gốc trong Sui gia) — không gắn hậu tố nào cả.
+  return "";
 }
 
 
@@ -77,47 +70,17 @@ function isGenericRelationLabel(label: string): boolean {
 
 function hasSpecificKinshipTerm(label: string): boolean {
   const value = lower(label);
-  if (!value || isGenericRelationLabel(value)) return false;
+  if (!value) return false;
 
-  return [
-    "ông cậu",
-    "bà dì",
-    "ông chú",
-    "bà cô",
-    "ông dượng",
-    "bà thím",
-    "bà mợ",
-    "bà bác",
-    "ông bác",
-    "cậu",
-    "dì",
-    "chú",
-    "thím",
-    "mợ",
-    "cô",
-    "dượng",
-    "bác",
-    "anh rể",
-    "chị dâu",
-    "em rể",
-    "em dâu",
-    "cháu dâu",
-    "cháu rể",
-    "con dâu",
-    "con rể",
-    "cha vợ",
-    "mẹ vợ",
-    "cha chồng",
-    "mẹ chồng",
-    "ông sui",
-    "bà sui",
-    "anh vợ",
-    "chị vợ",
-    "em vợ",
-    "anh chồng",
-    "chị chồng",
-    "em chồng",
-  ].some((term) => value === term || value.startsWith(`${term} `) || value.includes(` ${term}`));
+  // computeKinship (utils/kinshipHelpers.ts) là nguồn tính danh xưng DUY NHẤT
+  // cho cả 3 trang. Bất kỳ kết quả nào nó trả về đều được tin tưởng và dùng
+  // trực tiếp, TRỪ khi đó là 1 trong các nhãn dự phòng chung chung
+  // (isGenericRelationLabel) — ví dụ "Cùng hàng cha/mẹ", "Người gốc"...
+  // Trước đây dùng danh sách trắng liệt kê từng từ (bác/chú/cô/cậu/dì...)
+  // nên các từ hợp lệ nhưng không có trong danh sách (Mẹ, Cha, Bà mợ, Ông
+  // dượng, Bà thím, Bà bác...) bị coi là "chưa cụ thể" và rơi vào nhánh đoán
+  // mò, cho ra Dâu/Rể chung chung dù đã tính đúng.
+  return !isGenericRelationLabel(value);
 }
 
 function stripInLawSideSuffix(label: string): string {
@@ -130,7 +93,7 @@ function stripInLawSideSuffix(label: string): string {
 function appendSideSuffix(term: string, suffix: string): string {
   const cleanTerm = capitalizeVietnamese(stripInLawSideSuffix(term));
   if (!cleanTerm) return cleanTerm;
-  if (suffix === "trong gia đình chung") return cleanTerm;
+  if (!suffix) return cleanTerm;
   const lowerTerm = lower(cleanTerm);
   const lowerSuffix = lower(suffix);
   if (lowerTerm.endsWith(lowerSuffix)) return cleanTerm;
@@ -144,14 +107,11 @@ function specificTermFromRelationLabel(input: InLawAddressInput): string | null 
 
   if (!label || isGenericRelationLabel(label)) return null;
 
-  // Bên ngoại trong tiếng Việt miền Nam ưu tiên Cậu/Dì, không dùng Chú/Bác ngoại.
-  if (input.branch === "maternal" || label.includes("ngoại")) {
-    if (label.includes("ông bác") || label.includes("ông chú")) return appendSideSuffix("Ông cậu ngoại", suffix);
-    if (label.includes("bà bác") || label.includes("bà cô")) return appendSideSuffix("Bà dì ngoại", suffix);
-    if (label === "bác" || label === "chú") return appendSideSuffix("Cậu", suffix);
-    if (label === "cô") return appendSideSuffix("Dì", suffix);
-  }
-
+  // Danh xưng cụ thể đã được `computeKinship` (utils/kinshipHelpers.ts) tính
+  // đúng theo bản chốt hệ thống danh xưng chung (quy tắc 2 tầng bàng hệ, Chế/
+  // Chị, đồng hao...). Không tự ý ép lại theo nội/ngoại ở đây nữa — tầng liền
+  // kề ông/bà (ông bác/ông chú/bà cô/ông cậu/bà dì) không còn phân biệt nội/
+  // ngoại, nên việc ép "bên ngoại luôn là cậu/dì" sẽ sai với quy tắc mới.
   if (hasSpecificKinshipTerm(relation)) return appendSideSuffix(relation, suffix);
 
   return null;
@@ -170,6 +130,10 @@ export function getInLawAddressDetail(input: InLawAddressInput): string {
 }
 
 function generationTerm(input: InLawAddressInput): string {
+  return generationTermRaw(input).trim();
+}
+
+function generationTermRaw(input: InLawAddressInput): string {
   const label = lower(input.relationLabel);
   const person = input.person;
   const suffix = sideInLawSuffix(input);
@@ -205,7 +169,7 @@ function generationTerm(input: InLawAddressInput): string {
     }
     if (label.includes("chồng của")) {
       if (label.includes("cô") || label.includes("dì")) return appendSideSuffix(input.generation <= -2 ? "Ông dượng" : "Dượng", suffix);
-      if (label.includes("chị")) return appendSideSuffix("Anh rể", suffix);
+      if (label.includes("chế")) return appendSideSuffix("Anh rể", suffix);
       if (label.includes("em")) return appendSideSuffix("Em rể", suffix);
       if (label.includes("cháu")) return appendSideSuffix("Cháu rể", suffix);
     }
@@ -243,26 +207,27 @@ function generationTerm(input: InLawAddressInput): string {
   }
 
   if (input.generation === -1) {
-    if (label.startsWith("cha")) return `${parentTerm("male", input.region ?? "south")} ${suffix}`;
-    if (label.startsWith("mẹ")) return `${parentTerm("female", input.region ?? "south")} ${suffix}`;
+    if (label.startsWith("cha")) return `${parentTerm("male")} ${suffix}`;
+    if (label.startsWith("mẹ")) return `${parentTerm("female")} ${suffix}`;
 
-    if (person.gender === "female") {
-      if (label.includes("ngoại") || input.branch === "maternal") return `dì/cô ${suffix}`;
-      return `cô/bác ${suffix}`;
+    // Dự phòng khi computeKinship không xác định được (thiếu dữ liệu quan hệ):
+    // bên ngoại vẫn chốt cậu/dì; bên nội mặc định bác/chú/cô (không rõ tuổi
+    // nên để ngỏ bác/chú).
+    if (input.branch === "maternal") {
+      if (person.gender === "female") return `dì ${suffix}`;
+      if (person.gender === "male") return `cậu ${suffix}`;
+      return `cậu/dì ${suffix}`;
     }
 
-    if (person.gender === "male") {
-      if (label.includes("ngoại") || input.branch === "maternal") return `cậu/bác ${suffix}`;
-      return `chú/bác ${suffix}`;
-    }
-
-    return `cô/chú/bác/cậu/dì ${suffix}`;
+    if (person.gender === "female") return `cô ${suffix}`;
+    if (person.gender === "male") return `bác/chú ${suffix}`;
+    return `cô/chú/bác ${suffix}`;
   }
 
   if (input.generation === 0) {
-    if (person.gender === "female") return `chị/em ${suffix}`;
+    if (person.gender === "female") return `chế/em ${suffix}`;
     if (person.gender === "male") return `anh/em ${suffix}`;
-    return `anh/chị/em ${suffix}`;
+    return `anh/chế/em ${suffix}`;
   }
 
   if (input.generation === 1) return `con/cháu ${suffix}`;

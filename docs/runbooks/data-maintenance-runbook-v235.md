@@ -12,7 +12,7 @@ Các nhóm đã có:
 - Empty families
 - Data Maintenance index page
 
-Nguyên tắc:
+Nguyên tắc: 
 
 > Preview trước, repair sau. Không hard delete. Mọi thao tác repair phải có confirm.
 

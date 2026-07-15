@@ -8,7 +8,6 @@ import type {
 import {
   getInLawAddressDetail,
   getInLawAddressSuggestion,
-  type KinshipAddressRegion,
 } from "@/utils/kinship/inLawAddressing";
 
 export type LineageBranch = "paternal" | "maternal";
@@ -21,8 +20,6 @@ export interface LineageDisplayOptions {
   hideDaughtersInLaw: boolean;
   /** Ẩn nam phối ngẫu đi vào dòng họ qua hôn nhân: chồng/con rể/anh em rể/dượng... */
   hideSonsInLaw: boolean;
-  /** Vùng miền dùng để gợi ý cách xưng hô trong bảng Sui gia. */
-  addressRegion: KinshipAddressRegion;
 }
 
 export interface LineagePersonItem {
@@ -30,6 +27,7 @@ export interface LineagePersonItem {
   generation: number;
   branch: LineageBranch | "center";
   relationLabel: string;
+  addressHint?: string;
   note?: string;
   isInLaw?: boolean;
 }
@@ -123,7 +121,6 @@ const DEFAULT_DISPLAY_OPTIONS: LineageDisplayOptions = {
   includeClan: false,
   hideDaughtersInLaw: false,
   hideSonsInLaw: false,
-  addressRegion: "south",
 };
 
 function normalizeDisplayOptions(options?: Partial<LineageDisplayOptions>): LineageDisplayOptions {
@@ -202,16 +199,38 @@ function applyRootKinshipLabels(input: {
   relationships?: Relationship[];
   items: LineagePersonItem[];
 }): LineagePersonItem[] {
-  return input.items.map((item) => ({
-    ...item,
-    relationLabel: relationFromRoot({
+  return input.items.map((item) => {
+    const relationLabel = relationFromRoot({
       root: input.root,
       target: item.person,
       persons: input.persons,
       relationships: input.relationships,
       fallback: item.relationLabel,
-    }),
-  }));
+    });
+
+    // Dùng chung 1 bộ xưng hô (utils/kinship/inLawAddressing.ts) cho cả 3 hệ
+    // thống (Tra cứu danh xưng, Nội ngoại, Sui gia) để luôn ra cùng kết quả
+    // khi tra cùng một người.
+    const hint =
+      item.branch === "center" && item.generation === 0
+        ? "Người đang chọn"
+        : getInLawAddressSuggestion({
+            person: item.person,
+            root: input.root,
+            spouse: null,
+            side: "center",
+            branch: item.branch === "center" ? "descendant" : item.branch,
+            generation: item.generation,
+            relationLabel,
+            isInLaw: item.isInLaw,
+          });
+
+    return {
+      ...item,
+      relationLabel,
+      addressHint: hint,
+    };
+  });
 }
 
 function applyRootKinshipLabelsForInLaw(input: {
@@ -306,7 +325,6 @@ function applyInLawAddressHints(
   items: InLawPersonItem[],
   root: Person | null,
   spouse: Person | null,
-  region: KinshipAddressRegion,
 ): InLawPersonItem[] {
   return items.map((item) => {
     const addressInput = {
@@ -318,7 +336,6 @@ function applyInLawAddressHints(
       generation: item.generation,
       relationLabel: item.relationLabel,
       isInLaw: item.isInLaw,
-      region,
     } as const;
 
     return {
@@ -581,36 +598,30 @@ export function buildInLawComparison(input: InLawInput): InLawComparisonResult {
     }
   }
 
-  const addressRegion = displayOptions.addressRegion;
   const rootPaternal = applyInLawAddressHints(
     applyRootKinshipLabelsForInLaw({ root, persons: input.persons, relationships: input.relationships, items: rootLineage.paternal }),
     root,
     selectedSpouse,
-    addressRegion,
   );
   const rootMaternal = applyInLawAddressHints(
     applyRootKinshipLabelsForInLaw({ root, persons: input.persons, relationships: input.relationships, items: rootLineage.maternal }),
     root,
     selectedSpouse,
-    addressRegion,
   );
   const couple = applyInLawAddressHints(
     applyRootKinshipLabelsForInLaw({ root, persons: input.persons, relationships: input.relationships, items: coupleItems }),
     root,
     selectedSpouse,
-    addressRegion,
   );
   const spousePaternal = applyInLawAddressHints(
     applyRootKinshipLabelsForInLaw({ root, persons: input.persons, relationships: input.relationships, items: spouseLineage.paternal }),
     root,
     selectedSpouse,
-    addressRegion,
   );
   const spouseMaternal = applyInLawAddressHints(
     applyRootKinshipLabelsForInLaw({ root, persons: input.persons, relationships: input.relationships, items: spouseLineage.maternal }),
     root,
     selectedSpouse,
-    addressRegion,
   );
 
   return {

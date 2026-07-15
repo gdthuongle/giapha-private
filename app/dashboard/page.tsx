@@ -1,7 +1,11 @@
 import { getTodayLunar } from "@/utils/dateHelpers";
 import { computeEvents } from "@/utils/eventHelpers";
+import { computeDeathAnniversaryEvents } from "@/utils/events/deathAnniversaryOccurrence";
 import { getIsAdmin, getProfile, getSupabase } from "@/utils/supabase/queries";
-import { buildVisiblePersonSetForProfile } from "@/utils/permissions/applyPersonVisibility";
+import {
+  buildVisiblePersonSetForProfile,
+  filterPersonEventsForVisiblePersons,
+} from "@/utils/permissions/applyPersonVisibility";
 import {
   ArrowRight,
   BarChart2,
@@ -92,6 +96,28 @@ type PermissionFamilyChild = {
   [key: string]: unknown;
 };
 
+type DeathAnniversaryEventRecord = {
+  id: string;
+  type: string;
+  start_date: string | null;
+  sort_date: string | null;
+  lunar_year?: number | null;
+  lunar_month?: number | null;
+  lunar_day?: number | null;
+  lunar_is_leap_month?: boolean | null;
+  description?: string | null;
+  place_text?: string | null;
+  deleted_at?: string | null;
+  [key: string]: unknown;
+};
+
+type PersonEventLinkRecord = {
+  event_id: string;
+  person_id: string;
+  role?: string | null;
+  [key: string]: unknown;
+};
+
 export default async function DashboardLaunchpad() {
   const isAdmin = await getIsAdmin();
   const supabase = await getSupabase();
@@ -105,6 +131,8 @@ export default async function DashboardLaunchpad() {
     familiesRes,
     familyParentsRes,
     familyChildrenRes,
+    eventsRes,
+    personEventsRes,
   ] = await Promise.all([
     supabase
       .from("persons_active")
@@ -119,6 +147,8 @@ export default async function DashboardLaunchpad() {
     supabase.from("families").select("*").is("deleted_at", null),
     supabase.from("family_parents").select("*"),
     supabase.from("family_children").select("*"),
+    supabase.from("events").select("*").is("deleted_at", null),
+    supabase.from("person_events").select("*"),
   ]);
 
   const allPersons = (personsRes.data ?? []) as DashboardEventPerson[];
@@ -127,6 +157,8 @@ export default async function DashboardLaunchpad() {
   const allFamilies = (familiesRes.data ?? []) as PermissionFamily[];
   const allFamilyParents = (familyParentsRes.data ?? []) as PermissionFamilyParent[];
   const allFamilyChildren = (familyChildrenRes.data ?? []) as PermissionFamilyChild[];
+  const allEventModels = (eventsRes.data ?? []) as DeathAnniversaryEventRecord[];
+  const allPersonEvents = (personEventsRes.data ?? []) as PersonEventLinkRecord[];
 
   const permission = buildVisiblePersonSetForProfile({
     profile,
@@ -148,7 +180,40 @@ export default async function DashboardLaunchpad() {
   // User thường không thấy custom_events để tránh rò rỉ sự kiện ngoài nhánh.
   const dashboardCustomEvents = permission.isRestricted ? [] : allCustomEvents;
 
-  const allEvents = computeEvents(dashboardPersons, dashboardCustomEvents);
+  const visibleFamilyIds = permission.isRestricted
+    ? new Set(
+        allFamilies
+          .filter((family) => {
+            const parents = allFamilyParents.filter((row) => row.family_id === family.id);
+            const children = allFamilyChildren.filter((row) => row.family_id === family.id);
+            return (
+              parents.some((row) => permission.visiblePersonIds.has(row.person_id)) ||
+              children.some((row) => permission.visiblePersonIds.has(row.person_id))
+            );
+          })
+          .map((family) => family.id),
+      )
+    : new Set(allFamilies.map((family) => family.id));
+
+  const visibleEventData = permission.isRestricted
+    ? filterPersonEventsForVisiblePersons({
+        events: allEventModels,
+        personEvents: allPersonEvents,
+        visiblePersonIds: permission.visiblePersonIds,
+        visibleFamilyIds,
+      })
+    : { events: allEventModels, personEvents: allPersonEvents };
+
+  const deathAnniversaryEvents = computeDeathAnniversaryEvents({
+    events: visibleEventData.events,
+    personEvents: visibleEventData.personEvents,
+    persons: allPersons,
+  });
+
+  const allEvents = [
+    ...computeEvents(dashboardPersons, dashboardCustomEvents),
+    ...deathAnniversaryEvents,
+  ].sort((a, b) => a.daysUntil - b.daysUntil);
   const upcomingEvents = allEvents.filter(
     (e) => e.daysUntil >= 0 && e.daysUntil <= 30,
   );
@@ -166,15 +231,15 @@ export default async function DashboardLaunchpad() {
       borderColor: "border-amber-200/60",
       hoverColor: "hover:border-amber-400 hover:shadow-amber-100",
     },
-   // {
-   //   title: "Sự kiện",
-   //   description: "Quản lý ngày giỗ, họp họ và các dịp quan trọng",
-   //   icon: <CalendarClock className="size-8 text-emerald-600" />,
-   //   href: "/dashboard/events",
-   //   bgColor: "bg-emerald-50",
-   //   borderColor: "border-emerald-200/60",
-   //   hoverColor: "hover:border-emerald-400 hover:shadow-emerald-100",
-   // },
+    // {
+    //   title: "Sự kiện",
+    //   description: "Quản lý ngày giỗ, họp họ và các dịp quan trọng",
+    //   icon: <CalendarClock className="size-8 text-emerald-600" />,
+    //   href: "/dashboard/events",
+    //   bgColor: "bg-emerald-50",
+    //   borderColor: "border-emerald-200/60",
+    //   hoverColor: "hover:border-emerald-400 hover:shadow-emerald-100",
+    // },
     {
       title: "Tra cứu danh xưng",
       description: "Hệ thống gọi tên họ hàng chuẩn xác",

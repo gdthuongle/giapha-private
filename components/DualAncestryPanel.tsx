@@ -51,7 +51,7 @@ function BranchCell({ items }: { items: LineagePersonItem[] }) {
           relationLabel={item.relationLabel}
           note={item.note}
           compact={items.length > 3}
-          addressHint={item.isInLaw ? "Người liên hệ qua hôn nhân" : undefined}
+          addressHint={item.addressHint || undefined}
         />
       ))}
     </div>

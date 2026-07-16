@@ -154,12 +154,12 @@ export default function MemberDetailModal() {
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           transition={{ duration: 0.2 }}
-          className="fixed inset-0 z-100 flex items-center justify-center p-4 sm:p-6 bg-stone-900/40 backdrop-blur-sm"
+          className="fixed inset-0 z-100 flex items-start sm:items-center justify-center overflow-y-auto p-4 py-8 sm:p-6 bg-stone-900/40 backdrop-blur-sm"
         >
           {/* Click-away backdrop (disabled while editing/creating to avoid accidental close) */}
           {!isEditing && !showCreateMember && (
             <div
-              className="absolute inset-0 cursor-pointer"
+              className="fixed inset-0 cursor-pointer"
               onClick={closeModal}
             />
           )}
@@ -172,7 +172,7 @@ export default function MemberDetailModal() {
             exit={{ scale: 0.96, opacity: 0, y: 15 }}
             transition={{ duration: 0.25, ease: "easeOut" }}
             layoutDependency={false}
-            className="relative bg-white/95 backdrop-blur-2xl rounded-3xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col border border-stone-200"
+            className="relative bg-white/95 backdrop-blur-2xl rounded-3xl shadow-2xl w-full max-w-4xl max-h-[85dvh] my-auto overflow-hidden flex flex-col border border-stone-200"
           >
             {/* Sticky Header Actions */}
             <div className="absolute top-4 right-4 sm:top-5 sm:right-5 z-20 flex items-center gap-2">

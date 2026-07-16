@@ -894,7 +894,7 @@ function TreeMinimap({
   scale: number;
 }) {
   const MINIMAP_WIDTH = 180;
-  const MINIMAP_HEIGHT = 50;
+  const MINIMAP_HEIGHT = 70;
   const PADDING = 40;
 
   const [viewport, setViewport] = useState({

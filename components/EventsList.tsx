@@ -14,7 +14,7 @@ import {
   CustomEventRecord,
   FamilyEvent,
 } from "@/utils/eventHelpers";
-import { motion } from "framer-motion";
+import { AnimatePresence, motion } from "framer-motion";
 import {
   AlignLeft,
   Cake,
@@ -32,7 +32,6 @@ import { Lunar, Solar } from "lunar-javascript";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/utils/supabase/client";
 import { useEffect, useMemo, useState, useTransition } from "react";
-import { createPortal } from "react-dom";
 
 interface EventsListProps {
   persons: {
@@ -258,48 +257,66 @@ function nextMemorialOccurrence(event: EventModelRecord, eventDate: Date, today:
   return nextYearlyOccurrence(eventDate.getMonth() + 1, eventDate.getDate());
 }
 
-// Lần giỗ gần nhất ĐÃ QUA (khác với nextMemorialOccurrence luôn trả về lần
-// sắp tới). Dùng để hiển thị ngày giỗ trong tab "Đã qua" — nếu không có hàm
-// này, ngày giỗ sẽ không bao giờ xuất hiện ở tab đó vì daysUntil luôn >= 0.
-function previousMemorialOccurrence(
-  event: EventModelRecord,
-  eventDate: Date,
-  nextOccurrence: Date,
-) {
-  if (event.lunar_month && event.lunar_day) {
-    try {
-      const nextLunarYear = Solar.fromYmd(
-        nextOccurrence.getFullYear(),
-        nextOccurrence.getMonth() + 1,
-        nextOccurrence.getDate(),
-      )
-        .getLunar()
-        .getYear();
-      const lunarMonthValue = event.lunar_is_leap_month
-        ? -event.lunar_month
-        : event.lunar_month;
+// Ngược lại với nextYearlyOccurrence: trả về lần xảy ra gần nhất đã diễn ra
+// (hôm nay hoặc trong quá khứ), dùng để hiển thị ngày giỗ ở tab "Đã qua".
+function previousYearlyOccurrence(month: number, day: number) {
+  const today = startOfLocalDay(getVietnamToday());
+  let occurrence = startOfLocalDay(new Date(today.getFullYear(), month - 1, day));
 
-      for (let offset = 1; offset <= 3; offset += 1) {
-        try {
-          const lunar = Lunar.fromYmd(nextLunarYear - offset, lunarMonthValue, event.lunar_day);
-          const solar = lunar.getSolar();
-          return startOfLocalDay(
-            new Date(solar.getYear(), solar.getMonth() - 1, solar.getDay()),
-          );
-        } catch {
-          // Tháng nhuận không xuất hiện mỗi năm; thử lùi thêm 1 năm âm lịch.
-        }
-      }
-      return null;
-    } catch (error) {
-      console.error(error);
-      return null;
-    }
+  if (occurrence.getTime() > today.getTime()) {
+    occurrence = startOfLocalDay(new Date(today.getFullYear() - 1, month - 1, day));
   }
 
-  return startOfLocalDay(
-    new Date(nextOccurrence.getFullYear() - 1, eventDate.getMonth(), eventDate.getDate()),
-  );
+  return occurrence;
+}
+
+// Ngược lại với nextSolarForLunar: tìm ngày dương lịch gần nhất (<= fromDate)
+// ứng với một ngày âm lịch cố định, lùi dần tối đa 2 năm âm lịch.
+function previousSolarForLunar(
+  lunarMonth: number,
+  lunarDay: number,
+  fromDate: Date,
+  isLeapMonth = false,
+) {
+  try {
+    const fromSolar = Solar.fromYmd(
+      fromDate.getFullYear(),
+      fromDate.getMonth() + 1,
+      fromDate.getDate(),
+    );
+    const currentLunarYear = fromSolar.getLunar().getYear();
+    const lunarMonthValue = isLeapMonth ? -lunarMonth : lunarMonth;
+
+    for (let offset = 0; offset >= -2; offset -= 1) {
+      try {
+        const lunar = Lunar.fromYmd(currentLunarYear + offset, lunarMonthValue, lunarDay);
+        const solar = lunar.getSolar();
+        const candidate = startOfLocalDay(
+          new Date(solar.getYear(), solar.getMonth() - 1, solar.getDay()),
+        );
+        if (candidate.getTime() <= startOfLocalDay(fromDate).getTime()) return candidate;
+      } catch {
+        // Leap lunar months do not exist every year; try an earlier lunar year.
+      }
+    }
+  } catch (error) {
+    console.error(error);
+  }
+
+  return null;
+}
+
+function previousMemorialOccurrence(event: EventModelRecord, eventDate: Date, today: Date) {
+  if (event.lunar_month && event.lunar_day) {
+    return previousSolarForLunar(
+      event.lunar_month,
+      event.lunar_day,
+      today,
+      Boolean(event.lunar_is_leap_month),
+    );
+  }
+
+  return previousYearlyOccurrence(eventDate.getMonth() + 1, eventDate.getDate());
 }
 
 function getPrincipalNames(input: {
@@ -398,13 +415,13 @@ function buildEventModelEvents(input: {
         structuredPlace,
       } as ExtendedFamilyEvent);
 
-      // Thêm 1 bản ghi riêng cho lần giỗ gần nhất ĐÃ QUA, để ngày giỗ cũng
-      // xuất hiện được ở tab "Đã qua" (nextOccurrence ở trên luôn là lần sắp
-      // tới nên daysUntil luôn >= 0, không bao giờ lọt vào tab "Đã qua").
-      const previousOccurrence = previousMemorialOccurrence(event, eventDate, nextOccurrence);
-      if (previousOccurrence) {
+      // Đồng thời tính lần giỗ gần nhất ĐÃ diễn ra (nếu khác lần sắp tới),
+      // để tab "Đã qua" cũng hiển thị được ngày giỗ. Vì mọi tab khác đều
+      // lọc daysUntil >= 0, entry này chỉ xuất hiện ở tab "Đã qua".
+      const previousOccurrence = previousMemorialOccurrence(event, eventDate, today);
+      if (previousOccurrence && previousOccurrence.getTime() !== nextOccurrence.getTime()) {
         const previousDaysUntil = differenceInDays(today, previousOccurrence);
-        if (previousDaysUntil < 0 && previousDaysUntil >= -365) {
+        if (previousDaysUntil < 0) {
           out.push({
             type: "death_anniversary",
             personId: fallbackPersonId ?? rootPersonId ?? undefined,
@@ -534,11 +551,13 @@ function EventCard({
     (event.daysUntil >= 0 && event.daysUntil < 5) ||
     (event.type === "death_recent" && event.daysUntil >= -5);
   // Ngày giỗ (death_anniversary) dùng UI giống ngày mất: không có nút xoá ở
-  // danh sách sự kiện. Các loại sự kiện khác chỉ hiện nút xoá cho admin/
-  // editor (canDelete) — trước đây thiếu kiểm tra này nên bất kỳ user nào
-  // xem trang cũng bấm xoá được.
+  // danh sách sự kiện. Các loại sự kiện khác chỉ cho phép xoá khi user có
+  // quyền tạo sự kiện (admin/editor) — trước đây thiếu kiểm tra này nên bất
+  // kỳ user nào cũng bấm xoá được.
   const canDeleteEventModel =
-    !isMemorial && canDelete && Boolean(event.eventModelId && event.eventModelRootPersonId);
+    !isMemorial &&
+    canDelete &&
+    Boolean(event.eventModelId && event.eventModelRootPersonId);
 
   const { setMemberModalId } = useMemberListView();
 
@@ -737,6 +756,67 @@ function EventCard({
         </button>
       ) : null}
     </motion.div>
+  );
+}
+
+function EventCreateModal({
+  persons,
+  disabled,
+  error,
+  onCancel,
+  onSubmit,
+}: {
+  persons: Person[];
+  disabled: boolean;
+  error: string | null;
+  onCancel: () => void;
+  onSubmit: (formData: FormData, rootPersonId: string | null) => void;
+}) {
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onCancel();
+    };
+    document.addEventListener("keydown", handleKeyDown);
+
+    const originalOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown);
+      document.body.style.overflow = originalOverflow;
+    };
+  }, [onCancel]);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto p-3 sm:items-center sm:p-6">
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        transition={{ duration: 0.15 }}
+        onClick={onCancel}
+        className="fixed inset-0 bg-stone-900/50 backdrop-blur-sm"
+      />
+      <motion.div
+        initial={{ opacity: 0, scale: 0.96, y: 12 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.96, y: 12 }}
+        transition={{ duration: 0.2 }}
+        className="relative z-10 my-6 w-full max-w-2xl sm:my-0"
+      >
+        {error ? (
+          <div className="mb-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            {error}
+          </div>
+        ) : null}
+        <SharedEventCreateForm
+          persons={persons}
+          disabled={disabled}
+          onCancel={onCancel}
+          onSubmit={onSubmit}
+        />
+      </motion.div>
+    </div>
   );
 }
 
@@ -1184,31 +1264,6 @@ export default function EventsList({
     };
   }, [eventModelEvents]);
 
-  // Khoá cuộn trang nền khi popup "Thêm sự kiện" mở. overflow:hidden trên
-  // <body> không đủ trên iOS Safari — dùng position:fixed để thực sự chặn
-  // cuộn nền (giống MemberDetailModal/CustomEventModal/UploadModal).
-  useEffect(() => {
-    if (!isCreateOpen) return;
-
-    const scrollY = window.scrollY;
-    const body = document.body;
-
-    body.style.position = "fixed";
-    body.style.top = `-${scrollY}px`;
-    body.style.left = "0";
-    body.style.right = "0";
-    body.style.width = "100%";
-
-    return () => {
-      body.style.position = "";
-      body.style.top = "";
-      body.style.left = "";
-      body.style.right = "";
-      body.style.width = "";
-      window.scrollTo(0, scrollY);
-    };
-  }, [isCreateOpen]);
-
   const [todayDate] = useState(() => {
     const today = new Date();
     const weekdays = [
@@ -1342,65 +1397,37 @@ export default function EventsList({
             onClick={() => {
               setCreateError(null);
               setCreateMessage(null);
-              setIsCreateOpen((value) => !value);
+              setIsCreateOpen(true);
             }}
             className="relative z-10 w-full sm:w-auto px-5 py-3 rounded-xl bg-stone-800 text-white font-semibold hover:bg-stone-900 active:scale-95 transition-all shadow-md hover:shadow-lg flex items-center justify-center gap-2"
             disabled={isPending}
           >
-            {isCreateOpen ? <X className="size-5 text-stone-300" /> : <Plus className="size-5 text-stone-300" />}
-            <span>{isCreateOpen ? "Đóng" : "Thêm sự kiện"}</span>
+            <Plus className="size-5 text-stone-300" />
+            <span>Thêm sự kiện</span>
           </button>
         ) : null}
       </motion.div>
 
-      {isCreateOpen
-        ? createPortal(
-            <div className="fixed inset-0 z-100 flex items-start sm:items-center justify-center overflow-y-auto p-4 py-8 sm:p-6 bg-stone-900/40 backdrop-blur-sm transition-opacity duration-300">
-              <div
-                style={{ maxHeight: "75vh" }}
-                className="relative bg-white/95 backdrop-blur-xl rounded-2xl shadow-2xl border border-stone-200/60 w-full max-w-2xl my-auto overflow-hidden transform transition-all flex flex-col"
-              >
-                <div className="px-6 py-5 border-b border-stone-100/80 flex justify-between items-center bg-stone-50/50 shrink-0">
-                  <h3 className="text-xl font-serif font-bold text-stone-800">
-                    Thêm sự kiện
-                  </h3>
-                  <button
-                    onClick={() => setIsCreateOpen(false)}
-                    className="text-stone-400 hover:text-stone-600 transition-colors size-8 flex items-center justify-center hover:bg-stone-100 rounded-full"
-                  >
-                    <X className="size-5" />
-                  </button>
-                </div>
-                <div
-                  style={{
-                    overflowY: "auto",
-                    WebkitOverflowScrolling: "touch",
-                    overscrollBehavior: "contain",
-                  }}
-                  className="flex-1 min-h-0 custom-scrollbar"
-                >
-                  {createMessage ? (
-                    <div className="m-4 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
-                      {createMessage}
-                    </div>
-                  ) : null}
-                  {createError ? (
-                    <div className="m-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-                      {createError}
-                    </div>
-                  ) : null}
-                  <SharedEventCreateForm
-                    persons={selectorPersons}
-                    disabled={isPending}
-                    onCancel={() => setIsCreateOpen(false)}
-                    onSubmit={handleCreateSharedEvent}
-                  />
-                </div>
-              </div>
-            </div>,
-            document.body,
-          )
-        : null}
+      {createMessage ? (
+        <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+          {createMessage}
+        </div>
+      ) : null}
+
+      <AnimatePresence>
+        {isCreateOpen ? (
+          <EventCreateModal
+            persons={selectorPersons}
+            disabled={isPending}
+            error={createError}
+            onCancel={() => {
+              setIsCreateOpen(false);
+              setCreateError(null);
+            }}
+            onSubmit={handleCreateSharedEvent}
+          />
+        ) : null}
+      </AnimatePresence>
 
       <div className="flex flex-col gap-3">
         <div className="flex flex-wrap items-center gap-2">

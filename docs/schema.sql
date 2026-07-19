@@ -1681,6 +1681,18 @@ BEGIN
 END;
 $$;
 
+--
+-- GHI CHU: ban dump goc (supabase db dump --schema public) BI THIEU trigger
+-- gan ham tren vao auth.users, vi trigger nay thuoc auth.users (ngoai pham
+-- vi --schema public) du ham thuc thi lai nam trong public. Bo sung lai
+-- thu cong tai day de fresh install khong bi loi "dang ky xong khong tu
+-- kich hoat / khong phai admin".
+--
+
+CREATE TRIGGER on_auth_user_created
+  AFTER INSERT ON auth.users
+  FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
+
 
 --
 -- Name: handle_updated_at(); Type: FUNCTION; Schema: public; Owner: -
